@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background-color: #f4f9f6;
+  color: #334155;
+  font-family: 'Noto Sans SC', 'Nunito', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ===== 卡片通用 ===== */
+.panel {
+  background: #ffffff;
+  border: 1px solid #e3f0e9;
+  box-shadow: 0 1px 3px rgba(26, 74, 58, 0.05);
+}
+
+.panel-hover {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.panel-hover:hover {
+  border-color: #bde7d1;
+  box-shadow: 0 6px 20px -8px rgba(31, 105, 82, 0.14);
+}
+
+/* ===== 焦点可见性 ===== */
+::focus-visible {
+  outline: 2px solid #37a678;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ===== 滚动条 ===== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(61, 141, 106, 0.22);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(61, 141, 106, 0.4);
+}
+
+/* ===== 减少动效 ===== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
