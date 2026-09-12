@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
+import { motion } from 'motion/react';
+import { cn } from './lib/utils.js';
 import { api } from './api.js';
 import {
   LeafIcon,
@@ -8,6 +10,7 @@ import {
   RadarIcon,
   FlameIcon,
 } from './components/Icons.jsx';
+import AuroraBackground from './components/AuroraBackground.jsx';
 import NotificationCenter from './components/NotificationCenter.jsx';
 import FeedView from './views/FeedView.jsx';
 import KeywordView from './views/KeywordView.jsx';
@@ -63,9 +66,12 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#f4f9f6] text-slate-700">
+    <div className="relative min-h-screen bg-[#f4f9f6] text-slate-700">
+      {/* 顶部极光氛围背景（纯装饰，不遮挡内容） */}
+      <AuroraBackground />
+
       {/* 顶部导航 */}
-      <header className="sticky top-0 z-30 bg-white/85 backdrop-blur-xl border-b border-mint-100">
+      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-mint-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="h-14 flex items-center justify-between gap-4">
             {/* Logo */}
@@ -90,6 +96,7 @@ export default function App() {
                   onClick={() => setActiveTab(t.key)}
                   icon={<t.icon width={16} height={16} />}
                   label={t.label}
+                  layoutId="nav-desktop"
                 />
               ))}
             </nav>
@@ -119,6 +126,7 @@ export default function App() {
                 onClick={() => setActiveTab(t.key)}
                 icon={<t.icon width={15} height={15} />}
                 label={t.label}
+                layoutId="nav-mobile"
               />
             ))}
           </nav>
@@ -126,7 +134,7 @@ export default function App() {
       </header>
 
       {/* 主内容 */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-20">
+      <main className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-20">
         {activeTab === 'feed' && <FeedView tick={tick} />}
         {activeTab === 'keywords' && <KeywordView status={status} tick={tick} />}
         {activeTab === 'topics' && <TopicView tick={tick} />}
@@ -135,16 +143,26 @@ export default function App() {
   );
 }
 
-function TabBtn({ active, onClick, icon, label }) {
+function TabBtn({ active, onClick, icon, label, layoutId }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-        active ? 'bg-mint-500 text-white shadow-soft' : 'text-slate-500 hover:text-mint-600 hover:bg-mint-50'
-      }`}
+      className={cn(
+        'relative flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer',
+        active ? 'text-white' : 'text-slate-500 hover:text-mint-600 hover:bg-mint-50',
+      )}
     >
-      {icon}
-      {label}
+      {active && (
+        <motion.div
+          layoutId={layoutId}
+          transition={{ type: 'spring', bounce: 0.25, duration: 0.5 }}
+          className="absolute inset-0 rounded-full bg-gradient-to-r from-mint-500 to-emerald-500 shadow-soft"
+        />
+      )}
+      <span className="relative z-10 flex items-center gap-1.5">
+        {icon}
+        {label}
+      </span>
     </button>
   );
 }
