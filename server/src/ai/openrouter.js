@@ -71,7 +71,7 @@ export function parseJSON(text) {
  * 关键词防伪验证：判断一条内容是否真实相关、是否假冒/谣言
  * @param {string} keyword
  * @param {{title: string, snippet?: string, source: string}} item
- * @returns {Promise<{isRelevant: boolean, isFake: boolean, confidence: number, summary: string}>}
+ * @returns {Promise<{isRelevant: boolean, isFake: boolean, confidence: number, relevance: number, summary: string}>}
  */
 export async function verifyKeywordHit(keyword, item) {
   const prompt = `你是一个信息真实性审核助手。请判断下面这条内容是否与关键词「${keyword}」真实相关，以及它是否属于假冒、谣言、标题党或虚假信息。
@@ -85,7 +85,10 @@ export async function verifyKeywordHit(keyword, item) {
   "isRelevant": true/false,   // 是否真的与关键词「${keyword}」相关
   "isFake": false/true,        // 是否是假冒、谣言、标题党或虚假信息
   "confidence": 0.0~1.0,       // 你的判断置信度
-  "summary": "一句话中文总结该内容的真实要点"
+  "relevance": 0.0~1.0,        // 与关键词「${keyword}」的相关度评分（越高越相关）
+  "summary": "一句话中文总结该内容的真实要点",
+  "relevanceReason": "简要说明为什么判定为相关或不相关（1~2句，给出判断依据）",
+  "fakeReason": "若 isFake 为 true，说明为什么疑似假冒/谣言/标题党（1~2句）；否则输出空字符串"
 }`;
 
   const text = await chat(
@@ -96,49 +99,16 @@ export async function verifyKeywordHit(keyword, item) {
     { json: true, max_tokens: 2000 },
   );
   const result = parseJSON(text);
+  const relevance = Number(result.relevance ?? (result.isRelevant ? 0.5 : 0));
   return {
     isRelevant: Boolean(result.isRelevant),
     isFake: Boolean(result.isFake),
     confidence: Number(result.confidence ?? 0.5),
+    relevance: Number.isFinite(relevance) ? relevance : (result.isRelevant ? 0.5 : 0),
     summary: String(result.summary ?? ''),
+    relevanceReason: String(result.relevanceReason ?? ''),
+    fakeReason: String(result.fakeReason ?? ''),
   };
 }
 
-/**
- * 热点聚合：对一批候选内容去重、分类、提炼主题、生成摘要
- * @param {string} topic 关注范围
- * @param {Array<{title: string, snippet?: string, source: string, url: string}>} items
- * @returns {Promise<Array<{title: string, summary: string, category: string, hotness: number}>>}
- */
-export async function aggregateHotspots(topic, items) {
-  const candidates = items
-    .slice(0, 30)
-    .map((it, i) => `${i + 1}. [${it.source}] ${it.title}${it.snippet ? ' | ' + it.snippet : ''}`)
-    .join('\n');
 
-  const prompt = `你是一个热点聚合分析助手。以下是关于「${topic}」的候选信息列表：
-
-${candidates}
-
-请提炼出其中的热点主题（去重合并相似内容），最多输出 10 条，按热度从高到低排序。严格返回 JSON（不要包含其他文字）：
-{
-  "hotspots": [
-    {
-      "title": "热点标题（中文，简洁）",
-      "category": "分类（如：模型发布/产品动态/融资/技术突破/行业政策等）",
-      "summary": "一句话中文总结",
-      "hotness": 0~100   // 综合热度评分
-    }
-  ]
-}`;
-
-  const text = await chat(
-    [
-      { role: 'system', content: '你是一个专业的热点聚合分析师，只输出 JSON。' },
-      { role: 'user', content: prompt },
-    ],
-    { json: true, max_tokens: 4000 },
-  );
-  const result = parseJSON(text);
-  return Array.isArray(result.hotspots) ? result.hotspots : [];
-}

@@ -61,13 +61,6 @@ export const PlayIcon = (p) => (
   </svg>
 );
 
-export const PauseIcon = (p) => (
-  <svg {...base(p)}>
-    <rect width="4" height="16" x="6" y="4" rx="1" />
-    <rect width="4" height="16" x="14" y="4" rx="1" />
-  </svg>
-);
-
 export const CheckIcon = (p) => (
   <svg {...base(p)}>
     <path d="M20 6 9 17l-5-5" />
@@ -151,16 +144,31 @@ export const TrendingUpIcon = (p) => (
   </svg>
 );
 
-export const ActivityIcon = (p) => (
-  <svg {...base(p)}>
-    <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.48 12H2" />
-  </svg>
-);
-
 export const EditIcon = (p) => (
   <svg {...base(p)}>
     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
     <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
+  </svg>
+);
+
+export const ChevronRightIcon = (p) => (
+  <svg {...base(p)}>
+    <path d="m9 18 6-6-6-6" />
+  </svg>
+);
+
+export const ChevronLeftIcon = (p) => (
+  <svg {...base(p)}>
+    <path d="m15 18-6-6 6-6" />
+  </svg>
+);
+
+export const SortIcon = (p) => (
+  <svg {...base(p)}>
+    <path d="m3 16 4 4 4-4" />
+    <path d="M7 20V4" />
+    <path d="m21 8-4-4-4 4" />
+    <path d="M17 4v16" />
   </svg>
 );
 
@@ -171,9 +179,39 @@ export const ClockIcon = (p) => (
   </svg>
 );
 
-export const ChevronRightIcon = (p) => (
+export const TagIcon = (p) => (
   <svg {...base(p)}>
-    <path d="m9 18 6-6-6-6" />
+    <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
+    <circle cx="7.5" cy="7.5" r="0.5" fill="currentColor" />
+  </svg>
+);
+
+// ===== 互动数据 / 信息展示图标 =====
+export const HeartIcon = (p) => (
+  <svg {...base(p)}>
+    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z" />
+  </svg>
+);
+
+export const MessageCircleIcon = (p) => (
+  <svg {...base(p)}>
+    <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+  </svg>
+);
+
+export const RepeatIcon = (p) => (
+  <svg {...base(p)}>
+    <path d="m17 2 4 4-4 4" />
+    <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+    <path d="m7 22-4-4 4-4" />
+    <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+  </svg>
+);
+
+export const QuoteIcon = (p) => (
+  <svg {...base(p)}>
+    <path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z" />
+    <path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z" />
   </svg>
 );
 
@@ -181,5 +219,61 @@ export const EyeIcon = (p) => (
   <svg {...base(p)}>
     <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
     <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+export const StarIcon = (p) => (
+  <svg {...base(p)}>
+    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+  </svg>
+);
+
+export const GitForkIcon = (p) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="18" r="3" />
+    <circle cx="6" cy="6" r="3" />
+    <circle cx="18" cy="6" r="3" />
+    <path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9" />
+    <path d="M12 12v3" />
+  </svg>
+);
+
+export const UsersIcon = (p) => (
+  <svg {...base(p)}>
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+);
+
+export const BadgeCheckIcon = (p) => (
+  <svg {...base(p)}>
+    <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" />
+    <path d="m9 12 2 2 4-4" />
+  </svg>
+);
+
+export const ArrowUpCircleIcon = (p) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="m16 12-4-4-4 4" />
+    <path d="M12 16V8" />
+  </svg>
+);
+
+export const PlayCircleIcon = (p) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="10" />
+    <polygon points="10 8 16 12 10 16 10 8" />
+  </svg>
+);
+
+export const CalendarIcon = (p) => (
+  <svg {...base(p)}>
+    <path d="M8 2v4" />
+    <path d="M16 2v4" />
+    <rect width="18" height="18" x="3" y="4" rx="2" />
+    <path d="M3 10h18" />
   </svg>
 );

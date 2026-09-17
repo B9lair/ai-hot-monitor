@@ -23,3 +23,17 @@ export function formatDateTime(input) {
     minute: '2-digit',
   });
 }
+
+// 数字压缩展示（12345 → 1.2万；1200 → 1.2k），用于点赞/浏览/star 等互动数据
+export function formatCount(n) {
+  if (n == null || n === '' || !Number.isFinite(Number(n))) return '';
+  const v = Number(n);
+  if (v >= 100000000) return trimZero(v / 100000000) + '亿';
+  if (v >= 10000) return trimZero(v / 10000) + '万';
+  if (v >= 1000) return trimZero(v / 1000) + 'k';
+  return String(v);
+}
+
+function trimZero(n) {
+  return (Math.round(n * 10) / 10).toString();
+}

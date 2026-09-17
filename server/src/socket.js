@@ -25,9 +25,9 @@ export function broadcastNotification(payload) {
   }
 }
 
-/** 广播热点更新 */
-export function broadcastUpdate(type, payload) {
+/** 广播关键词监控进度（前端显示「AI 校验中 x/y」） */
+export function broadcastMonitorProgress(payload) {
   if (io) {
-    io.emit(type, payload);
+    io.emit('monitor_progress', payload);
   }
 }

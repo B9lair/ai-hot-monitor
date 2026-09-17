@@ -6,7 +6,6 @@ import { api } from './api.js';
 import {
   LeafIcon,
   BellIcon,
-  ActivityIcon,
   RadarIcon,
   FlameIcon,
 } from './components/Icons.jsx';
@@ -14,12 +13,10 @@ import AuroraBackground from './components/AuroraBackground.jsx';
 import NotificationCenter from './components/NotificationCenter.jsx';
 import FeedView from './views/FeedView.jsx';
 import KeywordView from './views/KeywordView.jsx';
-import TopicView from './views/TopicView.jsx';
 
 const TABS = [
-  { key: 'feed', label: '动态流', icon: ActivityIcon },
-  { key: 'keywords', label: '关键词监控', icon: RadarIcon },
-  { key: 'topics', label: '热点发现', icon: FlameIcon },
+  { key: 'feed', label: '热点流', icon: FlameIcon },
+  { key: 'keywords', label: '热点范围', icon: RadarIcon },
 ];
 
 export default function App() {
@@ -27,6 +24,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('feed');
   const [unread, setUnread] = useState(0);
   const [tick, setTick] = useState(0);
+  const [monitorProgress, setMonitorProgress] = useState(null);
   const socketRef = useRef(null);
 
   // 加载状态
@@ -40,6 +38,8 @@ export default function App() {
     socketRef.current = socket;
 
     socket.on('connect', () => console.log('[socket] 已连接'));
+    // 关键词监控进度（立即检查时显示「AI 校验中 x/y」）
+    socket.on('monitor_progress', (payload) => setMonitorProgress(payload));
     socket.on('notification', (payload) => {
       // 任何后端事件都触发数据刷新
       setTick((t) => t + 1);
@@ -135,9 +135,8 @@ export default function App() {
 
       {/* 主内容 */}
       <main className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-20">
-        {activeTab === 'feed' && <FeedView tick={tick} />}
-        {activeTab === 'keywords' && <KeywordView status={status} tick={tick} />}
-        {activeTab === 'topics' && <TopicView tick={tick} />}
+        {activeTab === 'feed' && <FeedView tick={tick} status={status} />}
+        {activeTab === 'keywords' && <KeywordView status={status} tick={tick} progress={monitorProgress} />}
       </main>
     </div>
   );
@@ -179,3 +178,5 @@ function StatusBadge({ ok, label, className = '' }) {
     </div>
   );
 }
+
+

@@ -31,8 +31,8 @@ async function main() {
     }
 
     if (!result.isRelevant) continue;
-    if (result.isFake) continue; // 跳过假冒内容
 
+    // 与 Web 端保持一致：疑似假冒内容同样保留并标注 isFake，由调用方决定如何展示/通知
     alerts.push({
       title: item.title,
       url: item.url,

@@ -22,15 +22,15 @@ export const api = {
     request(`/keywords/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteKeyword: (id) => request(`/keywords/${id}`, { method: 'DELETE' }),
   runKeyword: (id) => request(`/keywords/${id}/run`, { method: 'POST' }),
-  // topics
-  getTopics: () => request('/topics'),
-  addTopic: (text, intervalMin) =>
-    request('/topics', { method: 'POST', body: JSON.stringify({ text, intervalMin }) }),
-  updateTopic: (id, data) => request(`/topics/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deleteTopic: (id) => request(`/topics/${id}`, { method: 'DELETE' }),
-  runTopic: (id) => request(`/topics/${id}/run`, { method: 'POST' }),
   // data
-  getAlerts: () => request('/alerts'),
-  getHotspots: () => request('/hotspots'),
+  getAlerts: (params = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && v !== '') qs.append(k, v);
+    }
+    const s = qs.toString();
+    return request(`/alerts${s ? `?${s}` : ''}`);
+  },
   getNotifications: () => request('/notifications'),
+  getStats: () => request('/stats'),
 };

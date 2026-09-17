@@ -18,7 +18,7 @@ import {
 
 const INTERVALS = [5, 10, 15, 30, 60];
 
-export default function KeywordView({ status, tick }) {
+export default function KeywordView({ status, tick, progress }) {
   const [keywords, setKeywords] = useState([]);
   const [input, setInput] = useState('');
   const [intervalMin, setIntervalMin] = useState(5);
@@ -91,12 +91,12 @@ export default function KeywordView({ status, tick }) {
         <div>
           <h2 className="font-display font-extrabold text-xl text-slate-800 flex items-center gap-2">
             <RadarIcon width={20} height={20} className="text-mint-600" />
-            关键词监控
+            热点范围
           </h2>
-          <p className="text-xs text-slate-400 mt-1">AI 自动识别真实动态，拦截假冒与标题党</p>
+          <p className="text-xs text-slate-400 mt-1">定义要关注的热点范围，AI 实时搜索并拦截假冒与标题党</p>
         </div>
         <span className="shrink-0 rounded-full bg-mint-50 text-mint-700 text-xs font-semibold px-2.5 py-1 border border-mint-100">
-          {enabledCount}/{keywords.length} 监控中
+          {enabledCount}/{keywords.length} 关注中
         </span>
       </div>
 
@@ -111,8 +111,8 @@ export default function KeywordView({ status, tick }) {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="输入要监控的关键词，如 GPT-5、Claude 4、Sora…"
-            aria-label="添加监控关键词"
+            placeholder="输入要关注的热点范围，如 GPT-5、Claude 4、Sora…"
+            aria-label="添加关注范围"
             className="w-full rounded-xl bg-white border border-mint-200 pl-10 pr-4 py-2.5 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-mint-400/60 focus:border-mint-400 transition"
           />
         </div>
@@ -150,7 +150,7 @@ export default function KeywordView({ status, tick }) {
       {/* 关键词列表 */}
       {keywords.length === 0 ? (
         <div className="panel rounded-2xl">
-          <EmptyState icon={<RadarIcon width={36} height={36} />} text="还没有监控关键词" hint="添加一个关键词，开始捕捉最新动态" />
+          <EmptyState icon={<RadarIcon width={36} height={36} />} text="还没有关注范围" hint="添加一个关注范围，开始捕捉最新热点" />
         </div>
       ) : (
         <div className="space-y-3">
@@ -198,6 +198,14 @@ export default function KeywordView({ status, tick }) {
                     ) : (
                       <p className="text-[11px] text-slate-400 font-mono mt-0.5">
                         每 {kw.intervalMin} 分钟 · {kw.alerts?.length ?? 0} 条命中
+                      </p>
+                    )}
+                    {running[kw.id] && (
+                      <p className="mt-0.5 flex items-center gap-1 text-[11px] font-mono text-mint-600">
+                        <LoaderIcon width={11} height={11} />
+                        {progress?.keywordId === kw.id && progress.total > 0
+                          ? `AI 校验中 ${progress.done}/${progress.total}`
+                          : '多源扫描中…'}
                       </p>
                     )}
                   </div>

@@ -18,18 +18,7 @@ model Keyword {
   alerts      Alert[]
 }
 
-// 热点范围配置
-model Topic {
-  id          String   @id @default(cuid())
-  text        String   @unique
-  enabled     Boolean  @default(true)
-  intervalMin Int      @default(15)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  hotspots    Hotspot[]
-}
-
-// 关键词命中（经过 AI 防伪验证后）
+// 关键词命中（经过 AI 防伪验证后 → 热点）
 model Alert {
   id          String    @id @default(cuid())
   keywordId   String
@@ -41,34 +30,22 @@ model Alert {
   summary     String
   isFake      Boolean
   confidence  Float
-  publishedAt DateTime?
+  relevance        Float?   // AI 相关度分数 0~1
+  hotScore         Float?   // 综合热度分（跨源归一化 0~100）
+  metrics          String?  // 原始互动指标 JSON 字符串（likes/retweets/views/stars/points…）
+  relevanceReason  String?  // AI 判断相关性的理由
+  fakeReason       String?  // AI 判断疑似假冒/谣言的理由
+  author           String?  // 作者 / UP 主名称
+  publishedAt      DateTime?
   createdAt   DateTime  @default(now())
 
   @@index([keywordId, createdAt])
 }
 
-// 热点内容（经过 AI 聚合后）
-model Hotspot {
-  id          String    @id @default(cuid())
-  topicId     String
-  topic       Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  title       String
-  url         String    @default("")
-  source      String
-  snippet     String?
-  summary     String
-  category    String?
-  hotness     Float?
-  publishedAt DateTime?
-  createdAt   DateTime  @default(now())
-
-  @@index([topicId, createdAt])
-}
-
 // 通知记录
 model Notification {
   id        String   @id @default(cuid())
-  type      String // alert | hotspot
+  type      String // alert
   channel   String // email | browser
   title     String
   content   String
