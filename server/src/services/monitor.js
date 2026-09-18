@@ -1,8 +1,9 @@
 import { prisma } from '../db.js';
 import { searchAll } from '../sources/index.js';
 import { computeHotScore } from '../sources/utils.js';
-import { verifyKeywordHit } from '../ai/openrouter.js';
-import { hasAI } from '../config.js';
+import { verifyKeywordHit, isRelevantHit, mentionsKeyword } from '../ai/openrouter.js';
+import { expandQuery } from '../ai/query-expansion.js';
+import { config, hasAI } from '../config.js';
 import { sendNotification } from './notifier.js';
 
 /** AI 校验并发上限（受控并发，显著缩短单轮耗时） */
@@ -32,8 +33,10 @@ async function mapLimit(items, limit, fn) {
  */
 export async function runMonitor(keywordRecord, onProgress) {
   const keyword = keywordRecord.text;
+  // 查询扩展：为关键词生成同义/变体查询词，提高搜索召回（带缓存）
+  const expansions = await expandQuery(keyword);
   // 采集 + 第一/二层过滤在 searchAll 内完成（每源保留条数由 config 控制）
-  const items = await searchAll(keyword);
+  const items = await searchAll(keyword, undefined, expansions);
 
   // 批量去重（一次查询替代逐条 findUnique）
   const urls = items.map((i) => i.url).filter(Boolean);
@@ -44,14 +47,20 @@ export async function runMonitor(keywordRecord, onProgress) {
     : new Set();
   const fresh = items.filter((i) => i.url && !existing.has(i.url));
 
-  const total = fresh.length;
+  // 廉价预过滤：丢弃标题/摘要完全不含关键词/扩展词任一有效 token 的条目（账号查询跳过）
+  const candidates =
+    !keyword.startsWith('@') && config.openrouter.preFilterKeyword
+      ? fresh.filter((i) => mentionsKeyword(i, keyword, expansions))
+      : fresh;
+
+  const total = candidates.length;
   let done = 0;
   let verified = 0;
   let alerted = 0;
   onProgress?.({ total, done });
 
   // 受控并发执行 AI 校验
-  const checked = await mapLimit(fresh, VERIFY_CONCURRENCY, async (item) => {
+  const checked = await mapLimit(candidates, VERIFY_CONCURRENCY, async (item) => {
     try {
       let result;
       if (hasAI()) {
@@ -60,10 +69,11 @@ export async function runMonitor(keywordRecord, onProgress) {
         // 无 AI 时退化为纯关键词匹配
         const matched = item.title.includes(keyword) || (item.snippet || '').includes(keyword);
         result = {
-          isRelevant: matched,
+          relevance: matched ? 0.8 : 0.2,
+          keywordMentioned: matched,
+          matchType: matched ? '直接相关' : '不相关',
           isFake: false,
           confidence: 0.6,
-          relevance: matched ? 0.8 : 0.2,
           summary: item.snippet || item.title,
           relevanceReason: matched ? '标题或摘要中包含关键词，按纯关键词匹配判定相关' : '',
           fakeReason: '',
@@ -83,7 +93,7 @@ export async function runMonitor(keywordRecord, onProgress) {
   for (const row of checked) {
     if (!row) continue;
     const { item, result } = row;
-    if (!result.isRelevant) continue;
+    if (!isRelevantHit(result)) continue;
     verified++;
 
     // 命中即入库（假冒内容也保留，仅不通知）

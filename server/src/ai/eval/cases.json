@@ -1,0 +1,98 @@
+{
+  "threshold": 0.6,
+  "cases": [
+    {
+      "id": "pos-claude-4.6",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "Anthropic 发布 Claude Sonnet 4.6，推理与代码能力大幅提升",
+      "snippet": "官方正式发布 Claude Sonnet 4.6，多模态与长上下文能力进一步增强。",
+      "source": "HackerNews",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本：明确提及关键词且为核心主题"
+    },
+    {
+      "id": "neg-openclaw",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "OpenClaw 推出全新 agent 协作框架",
+      "snippet": "OpenClaw 是一个开源的 Claude Code 替代品，本次更新优化了任务编排能力。",
+      "source": "GitHub",
+      "expectRelevant": false,
+      "note": "困难负样本：同生态但全文未提 Claude Sonnet 4.6"
+    },
+    {
+      "id": "neg-claude-code",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "Claude Code 发布 3.0 版本",
+      "snippet": "本次更新聚焦命令行交互体验与插件生态。",
+      "source": "HackerNews",
+      "expectRelevant": false,
+      "note": "同生态不同产品，未提关键词"
+    },
+    {
+      "id": "pos-claude-实测",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "实测 Claude Sonnet 4.6：代码生成质量横向对比",
+      "snippet": "作者实测 Claude Sonnet 4.6 在 LeetCode 与真实项目上的表现。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "note": "正样本：关键词为核心评测对象"
+    },
+    {
+      "id": "pos-gpt5",
+      "keyword": "GPT-5",
+      "title": "OpenAI 正式发布 GPT-5",
+      "snippet": "GPT-5 在推理基准上全面超越前代模型。",
+      "source": "Twitter",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "neg-gpt4",
+      "keyword": "GPT-5",
+      "title": "GPT-4 微调指南更新",
+      "snippet": "介绍如何对 GPT-4 进行指令微调。",
+      "source": "百度",
+      "expectRelevant": false,
+      "note": "负样本：不同版本（GPT-4 vs GPT-5）"
+    },
+    {
+      "id": "fake-gpt5-download",
+      "keyword": "GPT-5",
+      "title": "GPT-5 已开放免费本地下载（非官方渠道）",
+      "snippet": "点击链接即可下载 GPT-5 本地部署包。",
+      "source": "搜狗",
+      "expectRelevant": true,
+      "expectFake": true,
+      "note": "疑似标题党/虚假信息（相关但为假）"
+    },
+    {
+      "id": "pos-openai",
+      "keyword": "OpenAI",
+      "title": "OpenAI 宣布完成新一轮融资",
+      "snippet": "OpenAI 完成融资，估值继续攀升。",
+      "source": "Bing",
+      "expectRelevant": true,
+      "note": "正样本：品牌词为核心主体"
+    },
+    {
+      "id": "neg-ai-tool-review",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "AI 编程助手横向对比评测",
+      "snippet": "对比了 GitHub Copilot、Cursor 等主流工具。",
+      "source": "微博",
+      "expectRelevant": false,
+      "note": "负样本：仅同领域，未提关键词"
+    },
+    {
+      "id": "neg-sora-video",
+      "keyword": "Sora",
+      "title": "视频生成模型技术综述",
+      "snippet": "盘点近期文生视频模型的进展。",
+      "source": "知乎",
+      "expectRelevant": false,
+      "note": "负样本：泛领域综述，未提关键词"
+    }
+  ]
+}

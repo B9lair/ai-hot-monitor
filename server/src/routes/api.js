@@ -220,6 +220,8 @@ router.get('/status', (_req, res) => {
     hasAI: hasAI(),
     hasSMTP: hasSMTP(),
     model: config.openrouter.model,
+    judgeModel: config.openrouter.judgeModel || config.openrouter.model,
+    relevanceThreshold: config.openrouter.relevanceThreshold,
     intervals: config.intervals,
     sources: {
       twitter: Boolean(config.sources.twitterApiKey) && en.twitter,

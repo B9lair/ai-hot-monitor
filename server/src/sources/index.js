@@ -46,7 +46,7 @@ async function runAll(tasks) {
  * @param {string} keyword
  * @param {number} [keep] 每源保留条数（默认取 config.sources.perSourceLimit）
  */
-export async function searchAll(keyword, keep) {
+export async function searchAll(keyword, keep, extraQueries = []) {
   if (isAccountQuery(keyword)) {
     return dedupe(await searchAccount(keyword, keep || config.sources.perSourceLimit));
   }
@@ -55,21 +55,37 @@ export async function searchAll(keyword, keep) {
   // 采集阶段放宽（默认 20 条/源），保留条数交给质量层控制，避免"先截断后过滤"
   const collect = Math.max(s.collectLimit, s.perSourceLimit);
   const perSourceKeep = keep || s.perSourceLimit;
+  // 扩展词使用减半采集条数，控制请求成本与反爬风险
+  const collectExtra = Math.max(1, Math.floor(collect / 2));
 
-  const tasks = [
-    { key: 'twitter', run: () => searchTwitter(keyword, collect) },
-    { key: 'hackernews', run: () => searchHackerNews(keyword, collect) },
-    { key: 'bilibili', run: () => searchBilibili(keyword, collect) },
-    { key: 'weibo', run: () => searchWeibo(keyword, collect) },
-    { key: 'github', run: () => searchGithub(keyword, collect) },
-    { key: 'zhihu', run: () => searchZhihu(keyword, collect) },
-    // 境外源：默认关闭，挂代理/换网络后可经 .env 开启
-    { key: 'reddit', run: () => searchReddit(keyword, collect) },
-    { key: 'v2ex', run: () => searchV2ex(keyword, collect) },
-    { key: null, run: () => searchMultiEngines(keyword, undefined, collect) },
+  const queries = [
+    { q: keyword, collect, includeEngines: true },
+    ...extraQueries
+      .filter((q) => q && q !== keyword)
+      .map((q) => ({ q, collect: collectExtra, includeEngines: false })),
   ];
 
-  const raw = await runAll(tasks);
+  const buildTasks = (q, c, includeEngines) => [
+    { key: 'twitter', run: () => searchTwitter(q, c) },
+    { key: 'hackernews', run: () => searchHackerNews(q, c) },
+    { key: 'bilibili', run: () => searchBilibili(q, c) },
+    { key: 'weibo', run: () => searchWeibo(q, c) },
+    { key: 'github', run: () => searchGithub(q, c) },
+    { key: 'zhihu', run: () => searchZhihu(q, c) },
+    // 境外源：默认关闭，挂代理/换网络后可经 .env 开启
+    { key: 'reddit', run: () => searchReddit(q, c) },
+    { key: 'v2ex', run: () => searchV2ex(q, c) },
+    // 搜索引擎本身具备语义召回、反爬风险高，仅主词搜索一次
+    ...(includeEngines ? [{ key: null, run: () => searchMultiEngines(q, undefined, c) }] : []),
+  ];
+
+  const raw = [];
+  // 按查询词串行（各查询词内部多源并行），避免多查询词同时打搜索引擎触发风控
+  for (const { q, collect: c, includeEngines } of queries) {
+    const items = await runAll(buildTasks(q, c, includeEngines));
+    raw.push(...items);
+  }
+
   const basic = applyBasicFilter(raw, s); // 第一层
   return applyQualityFilter(basic, { ...s, perSourceLimit: perSourceKeep }); // 第二层
 }

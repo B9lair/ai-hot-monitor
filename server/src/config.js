@@ -13,12 +13,24 @@ const bool = (v, d = true) => {
   return String(v).toLowerCase() === 'true' || v === '1';
 };
 
+const num = (v, d) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+};
+
 export const config = {
   port: parseInt(process.env.PORT || '4000', 10),
 
   openrouter: {
     apiKey: process.env.OPENROUTER_API_KEY || '',
+    // 内容筛选/验证模型（高频调用，需便宜快）
     model: process.env.OPENROUTER_MODEL || 'deepseek-v4-flash',
+    // 评估法官模型（仅离线评估时调用，可用更强模型；留空则回退到 model）
+    judgeModel: process.env.OPENROUTER_JUDGE_MODEL || '',
+    // 相关性判定阈值：AI 只输出 relevance 分数，服务端用该阈值判定「是否相关」
+    relevanceThreshold: Math.min(1, Math.max(0, num(process.env.RELEVANCE_THRESHOLD, 0.6))),
+    // AI 校验前的廉价预过滤：丢弃标题/摘要完全不含关键词任一有效 token 的条目
+    preFilterKeyword: bool(process.env.PRE_FILTER_KEYWORD, true),
     baseUrl: 'https://openrouter.ai/api/v1',
   },
 
@@ -50,6 +62,10 @@ export const config = {
     collectLimit: parseInt(process.env.COLLECT_LIMIT || '20', 10),
     // 保留条数（每源）：质量层输出上限，避免单一源淹没
     perSourceLimit: parseInt(process.env.PER_SOURCE_LIMIT || '8', 10),
+    // 查询扩展（Query Expansion）：为关键词生成同义/变体查询词以提高搜索召回
+    queryExpand: bool(process.env.QUERY_EXPAND, true),
+    // 扩展词数量上限
+    queryExpandLimit: Math.min(5, Math.max(1, num(process.env.QUERY_EXPAND_LIMIT, 3))),
     enabled: {
       twitter: bool(process.env.SOURCE_TWITTER, true),
       hackernews: bool(process.env.SOURCE_HACKERNEWS, true),
