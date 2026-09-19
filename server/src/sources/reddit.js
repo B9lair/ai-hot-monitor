@@ -8,19 +8,26 @@ import { http, normalize, UA } from './utils.js';
 export async function searchReddit(query, limit = 20) {
   try {
     const res = await http.get('https://www.reddit.com/search.json', {
-      params: { q: query, limit, sort: 'new' },
+      params: { q: query, limit, sort: 'top', t: 'month' },
       headers: { 'User-Agent': UA },
     });
     const children = res.data?.data?.children || [];
     return children
       .map((c) => {
         const d = c?.data || {};
+        const author = d.author && d.author !== '[deleted]' ? d.author : '';
         return normalize({
           title: d.title || '',
           url: d.permalink ? `https://www.reddit.com${d.permalink}` : d.url || '',
           snippet: String(d.selftext || '').slice(0, 200),
           source: 'Reddit',
           publishedAt: d.created_utc ? new Date(d.created_utc * 1000) : null,
+          author,
+          metrics: {
+            likes: d.score || 0,
+            comments: d.num_comments || 0,
+            upvoteRatio: d.upvote_ratio || 0,
+          },
         });
       })
       .slice(0, limit)

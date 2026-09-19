@@ -30,6 +30,7 @@ export async function searchHackerNews(query, limit = 20) {
         snippet: h.story_text ? String(h.story_text).slice(0, 200) : '',
         source: 'HackerNews',
         publishedAt: h.created_at ? new Date(h.created_at) : null,
+        author: h.author || '',
         // 热度指标：点数 / 评论数（供综合热度分计算）
         metrics: { points: h.points || 0, comments: h.num_comments || 0 },
       }),

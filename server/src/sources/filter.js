@@ -4,6 +4,7 @@
  *
  * 原则：采集阶段尽量拓宽范围、不过早过滤；过滤按层依次进行。
  */
+import { computeHotScore } from './utils.js';
 
 /**
  * 第一层 · 基础过滤：格式校验 + URL 去重 + 时间窗口
@@ -62,11 +63,34 @@ export function applyQualityFilter(items, s) {
   // 蓝V加权后的综合分降序
   twKept.sort((a, b) => (m(b).score || 0) - (m(a).score || 0));
 
-  // 每源保留上限（Twitter 已按热度排序，其余保持源内原顺序）
+  // 非 Twitter 源：按源分组 → 组内按 hotScore 降序（有热度排前，无热度排后）
+  const groups = new Map();
+  for (const it of others) {
+    if (!groups.has(it.source)) groups.set(it.source, []);
+    groups.get(it.source).push(it);
+  }
+  const ranked = [];
+  for (const list of groups.values()) {
+    list.sort(
+      (a, b) =>
+        (computeHotScore(b.source, b.metrics) ?? -1) - (computeHotScore(a.source, a.metrics) ?? -1),
+    );
+    ranked.push(...list);
+  }
+
+  // 可选全局热度门槛（默认 0 = 关闭）：仅过滤「有 hotScore 且低于门槛」的条目；
+  // 搜索引擎无 hotScore（null）不受影响，仍靠语义相关性保留
+  const minHot = Number(s.minHotScore) || 0;
+
+  // 每源保留上限（Twitter 已按 score 排序，其余已按 hotScore 排序）
   const keep = Math.max(1, Number(s.perSourceLimit) || 8);
   const count = new Map();
   const out = [];
-  for (const it of [...twKept, ...others]) {
+  for (const it of [...twKept, ...ranked]) {
+    if (it.source !== 'Twitter' && minHot > 0) {
+      const hs = computeHotScore(it.source, it.metrics);
+      if (hs !== null && hs < minHot) continue;
+    }
     const n = (count.get(it.source) || 0) + 1;
     count.set(it.source, n);
     if (n <= keep) out.push(it);

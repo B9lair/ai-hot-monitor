@@ -125,6 +125,7 @@ export default function FeedView({ tick, status }) {
   const [hotRange, setHotRange] = useState('all');
   const [sortKey, setSortKey] = useState('createdAt_desc');
   const [page, setPage] = useState(1);
+  const [showAll, setShowAll] = useState(false); // 查看全部历史（含被 7 天规则隐藏的）
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const initialized = useRef(false);
@@ -159,7 +160,7 @@ export default function FeedView({ tick, status }) {
     if (!initialized.current) setLoading(true);
     try {
       const [f, s, k] = await Promise.all([
-        api.getAlerts({ ...params, page, pageSize: PAGE_SIZE }),
+        api.getAlerts({ ...params, page, pageSize: PAGE_SIZE, ...(showAll ? { includeHidden: 'true' } : {}) }),
         api.getStats(),
         api.getKeywords(),
       ]);
@@ -175,7 +176,7 @@ export default function FeedView({ tick, status }) {
       setRefreshing(false);
       initialized.current = true;
     }
-  }, [params, page]);
+  }, [params, page, showAll]);
 
   useEffect(() => {
     load();
@@ -302,6 +303,19 @@ export default function FeedView({ tick, status }) {
               {allDetailsOpen ? '折叠全部详情' : '展开全部详情'}
             </button>
           )}
+          <button
+            onClick={() => {
+              setShowAll((v) => !v);
+              setPage(1);
+            }}
+            className={`flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1.5 transition-colors cursor-pointer ${
+              showAll ? 'bg-mint-50 text-mint-700' : 'text-slate-400 hover:text-mint-600 hover:bg-mint-50'
+            }`}
+            title="查看全部历史（含超过保留期且未收藏的内容）"
+          >
+            <ClockIcon width={14} height={14} />
+            {showAll ? '仅看近期' : '查看全部历史'}
+          </button>
           <button
             onClick={() => {
               setRefreshing(true);

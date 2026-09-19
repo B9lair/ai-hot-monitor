@@ -1,6 +1,15 @@
 import * as cheerio from 'cheerio';
 import { config } from '../config.js';
-import { http, normalize } from './utils.js';
+import { http, normalize, parseRelativeTime, parseChineseCount } from './utils.js';
+
+/** 从微博卡片 .card-act 提取转发/评论/赞数量（失败返回 null） */
+function extractWeiboMetrics($, el) {
+  const reposts = parseChineseCount($(el).find('a[action-type="feed_list_forward"]').first().text());
+  const comments = parseChineseCount($(el).find('a[action-type="feed_list_comment"]').first().text());
+  const likes = parseChineseCount($(el).find('a[action-type="feed_list_like"] .woo-like-count').first().text());
+  if (!reposts && !comments && !likes) return null;
+  return { reposts, comments, likes };
+}
 
 /**
  * 微博关键词搜索（需 WEIBO_COOKIE）
@@ -25,28 +34,34 @@ export async function searchWeibo(query, limit = 20) {
     const items = [];
     $('.card-wrap').each((_, el) => {
       const txt = $(el).find('.txt').first().text().trim();
-      const from = $(el).find('.from a').first();
-      const user = from.text().trim();
-      const userHref = from.attr('href') || '';
+      if (!txt) return;
+      // 作者昵称：.info a.name（含 nick-name 属性）
+      const nameA = $(el).find('.info a.name').first();
+      const author = nameA.text().trim();
+      // 微博正文详情链接：优先 weibo.com/{uid}/{mid}
+      const fromA = $(el).find('.from a').first();
+      const fromHref = fromA.attr('href') || '';
+      const uidM = `${nameA.attr('href') || ''} ${fromHref}`.match(/weibo\.com\/(\d+)/);
+      const uid = uidM ? uidM[1] : '';
       const mid = $(el).attr('mid') || '';
-      let url = userHref.startsWith('//') ? 'https:' + userHref : userHref;
-      if (mid && url.includes('/u/')) {
-        // 尝试构造微博详情链接：weibo.com/{uid}/{mid}
-        const m = url.match(/weibo\.com\/(\d+)/);
-        if (m) url = `https://weibo.com/${m[1]}/${mid}`;
-      }
+      let url = uid && mid ? `https://weibo.com/${uid}/${mid}` : fromHref;
+      if (url.startsWith('//')) url = 'https:' + url;
       if (!url) url = `https://s.weibo.com/weibo?q=${encodeURIComponent(query)}`;
-      if (txt) {
-        items.push(
-          normalize({
-            title: txt.slice(0, 120),
-            url,
-            snippet: txt.slice(0, 200),
-            source: '微博',
-            publishedAt: null,
-          }),
-        );
-      }
+      // 发布时间：.from 首个链接文本（如「09月16日 15:30」）
+      const publishedAt = parseRelativeTime(fromA.text());
+      // 互动指标：转发/评论/赞
+      const metrics = extractWeiboMetrics($, el);
+      items.push(
+        normalize({
+          title: txt.slice(0, 120),
+          url,
+          snippet: txt.slice(0, 200),
+          source: '微博',
+          publishedAt,
+          author: author || '',
+          ...(metrics ? { metrics } : {}),
+        }),
+      );
     });
     return items.slice(0, limit).filter((i) => i.title);
   } catch (err) {

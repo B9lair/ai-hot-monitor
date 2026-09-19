@@ -25,6 +25,8 @@ export async function searchV2ex(query, limit = 20) {
           snippet: String(t.content || '').slice(0, 200),
           source: 'V2EX',
           publishedAt: t.created ? new Date(t.created * 1000) : null,
+          author: t.member?.username || '',
+          ...(t.replies ? { metrics: { comments: t.replies } } : {}),
         }),
       )
       .filter((i) => i.title && i.url);

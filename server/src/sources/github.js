@@ -13,8 +13,13 @@ export async function searchGithub(query, limit = 20) {
       headers.Authorization = `Bearer ${config.sources.githubToken}`;
     }
 
+    // 时间窗口下推：仅取近 N 天内推送过的仓库（与第一层 720h 窗口一致），并按热度排序
+    const s = config.sources;
+    const hours = s.timeWindowBySource?.GitHub ?? s.timeWindowHours;
+    const since = new Date(Date.now() - Math.max(1, hours) * 3600 * 1000).toISOString().slice(0, 10);
+
     const res = await http.get('https://api.github.com/search/repositories', {
-      params: { q: query, sort: 'updated', order: 'desc', per_page: limit },
+      params: { q: `${query} pushed:>${since}`, sort: 'stars', order: 'desc', per_page: limit },
       headers,
     });
     const items = res.data?.items || [];
@@ -27,8 +32,14 @@ export async function searchGithub(query, limit = 20) {
           snippet: String(r.description || '').slice(0, 200),
           source: 'GitHub',
           publishedAt: r.pushed_at ? new Date(r.pushed_at) : null,
-          // 热度指标：star / fork 数（供综合热度分计算）
-          metrics: { stars: r.stargazers_count || 0, forks: r.forks_count || 0 },
+          author: r.owner?.login || '',
+          // 热度指标：star / fork / watch / issue 数（供综合热度分计算）
+          metrics: {
+            stars: r.stargazers_count || 0,
+            forks: r.forks_count || 0,
+            watchers: r.watchers_count || 0,
+            issues: r.open_issues_count || 0,
+          },
         }),
       )
       .filter((i) => i.title);

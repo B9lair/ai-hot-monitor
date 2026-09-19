@@ -49,12 +49,19 @@ export async function searchZhihu(query, limit = 20) {
         const o = d?.object || {};
         const title = stripHtml(o.title || o.question?.name || o.title_area?.text || '');
         const url = toWebUrl(o.url || o.html_url, o);
+        const author = o.author?.name || o.member?.name || '';
+        // question 类型无赞同数，用回答数兜底（修正 question 热度恒为 0）
+        const likes = Number(o.voteup_count) || Number(o.answer_count) || 0;
+        const comments = Number(o.comment_count) || 0;
+        const ts = o.created_time || o.updated_time;
         return normalize({
           title,
           url,
           snippet: stripHtml(o.excerpt || o.description).slice(0, 200),
           source: '知乎',
-          publishedAt: null,
+          publishedAt: ts ? new Date(Number(ts) * 1000) : null,
+          author,
+          ...(likes || comments ? { metrics: { likes, comments } } : {}),
         });
       })
       .filter((i) => i.title);

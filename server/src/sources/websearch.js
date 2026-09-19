@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 import { config } from '../config.js';
-import { http, normalize, sleep } from './utils.js';
+import { http, normalize, sleep, parseRelativeTime } from './utils.js';
 
 /**
  * 通用网页搜索结果抓取（无需 API key，注意控制频率）
@@ -225,7 +225,16 @@ export async function searchWeb(engine, query, limit = 15) {
   try {
     const items = await fn(engine, query, limit);
     if (items.length > 0) markOk(engine);
-    return items.slice(0, limit).map((i) => normalize({ ...i, source: engineName(engine) }));
+    return items.slice(0, limit).map((i, idx) =>
+      normalize({
+        ...i,
+        source: engineName(engine),
+        // 尽力解析结果日期（新闻结果常含「x天前」/绝对日期），无则 null → 第一层放行
+        publishedAt: parseRelativeTime(`${i.title || ''} ${i.snippet || ''}`),
+        // 搜索引擎无互动指标，仅带结果位次 rank（1 起）作为弱信号
+        metrics: { rank: idx + 1 },
+      }),
+    );
   } catch (err) {
     markFail(engine, err.message);
     return [];

@@ -4,15 +4,19 @@ import { BellIcon, MailIcon, InboxIcon, XIcon, ExternalIcon } from './Icons.jsx'
 import { formatDateTime } from '../utils.js';
 
 // 顶部通知中心（唯一通知入口）
-export default function NotificationCenter({ unread, onClear }) {
+export default function NotificationCenter({ unread, onClear, refreshKey = 0 }) {
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
   const load = () => api.getNotifications().then(setNotifications).catch(console.error);
 
+  // 外部刷新（Socket 重连补偿 / 收到新通知）时重新拉取，弥补断线期间错过的提醒
   useEffect(() => {
     load();
+  }, [refreshKey]);
+
+  useEffect(() => {
     const handler = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };

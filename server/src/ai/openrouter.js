@@ -51,27 +51,99 @@ export async function chat(messages, opts = {}) {
 }
 
 /**
- * 解析 JSON 响应（容错处理 markdown 代码块包裹）
+ * 修复 LLM 生成的常见非法 JSON：字符串内裸换行/制表符、尾逗号。
+ * 扫描时跟踪「是否位于字符串内」与转义状态，避免破坏合法内容。
+ */
+function repairJSON(s) {
+  let out = '';
+  let inStr = false;
+  let esc = false;
+  for (const ch of s) {
+    if (esc) {
+      out += ch;
+      esc = false;
+      continue;
+    }
+    if (ch === '\\') {
+      out += ch;
+      esc = true;
+      continue;
+    }
+    if (ch === '"') {
+      inStr = !inStr;
+      out += ch;
+      continue;
+    }
+    if (inStr && ch === '\n') {
+      out += '\\n';
+      continue;
+    }
+    if (inStr && ch === '\r') continue;
+    if (inStr && ch === '\t') {
+      out += '\\t';
+      continue;
+    }
+    out += ch;
+  }
+  return out.replace(/,\s*([}\]])/g, '$1');
+}
+
+/**
+ * 解析 JSON 响应（容错：markdown 代码块包裹 / 前后杂文 / 裸换行 / 尾逗号）
  */
 export function parseJSON(text) {
-  const cleaned = text
+  const cleaned = String(text || '')
     .replace(/```json/gi, '')
     .replace(/```/g, '')
     .trim();
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
-    throw new Error('AI 返回无法解析为 JSON');
+
+  const candidates = [cleaned];
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (match) candidates.push(match[0]);
+
+  for (const c of candidates) {
+    for (const v of [c, repairJSON(c)]) {
+      try {
+        return JSON.parse(v);
+      } catch {
+        /* 尝试下一种修复 */
+      }
+    }
   }
+  throw new Error(`AI 返回无法解析为 JSON：${cleaned.slice(0, 200)}`);
 }
 
-/** 把数值夹在 0~1 之间 */
-function clamp01(v, d = 0) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return d;
-  return Math.min(1, Math.max(0, n));
+/**
+ * 把数值夹在 0~1 之间。
+ * 严格解析：只接受 number 或非空数字字符串（"0.95" 可用）；非法值回退默认值并告警，
+ * 避免「模型返回非数字 → 静默兜底成 0 → 被误判为不相关」而毫无痕迹。
+ * @param {unknown} v 原始值
+ * @param {number} d 回退默认值
+ * @param {string} [field] 字段名（传入则在非法时打告警日志）
+ */
+function clamp01(v, d = 0, field = '') {
+  const n =
+    typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v.trim()) : NaN;
+  if (Number.isFinite(n)) return Math.min(1, Math.max(0, n));
+  if (field) console.warn(`[ai] 字段 ${field} 非法（${JSON.stringify(v)}），已回退默认值 ${d}`);
+  return d;
+}
+
+/**
+ * 严格布尔解析：模型可能把布尔值返回成字符串。
+ * 修复 `Boolean("false") === true` 导致「真实内容被误判为疑似假冒、从而不发送通知」的静默故障。
+ * @param {unknown} v 原始值
+ * @param {boolean} d 无法识别时的回退值
+ */
+function toBool(v, d = false) {
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v !== 0;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', '是', '真'].includes(s)) return true;
+    if (['false', '0', 'no', 'n', '否', '假', ''].includes(s)) return false;
+  }
+  return d;
 }
 
 /** 拆分关键词为 token（按空白/常见分隔符；连字符等保留，如 GPT-5） */
@@ -156,13 +228,13 @@ export async function verifyKeywordHit(keyword, item) {
   );
   const result = parseJSON(text);
   return {
-    relevance: clamp01(result.relevance),
-    keywordMentioned: Boolean(result.keywordMentioned),
+    relevance: clamp01(result.relevance, 0, 'relevance'),
+    keywordMentioned: toBool(result.keywordMentioned),
     matchType: String(result.matchType ?? ''),
     summary: String(result.summary ?? ''),
     relevanceReason: String(result.relevanceReason ?? ''),
-    isFake: Boolean(result.isFake),
-    confidence: clamp01(result.confidence, 0.5),
+    isFake: toBool(result.isFake),
+    confidence: clamp01(result.confidence, 0.5, 'confidence'),
     fakeReason: String(result.fakeReason ?? ''),
   };
 }

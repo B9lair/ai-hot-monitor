@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
 import { runMonitor } from '../services/monitor.js';
+import { sendAlertEmails } from '../services/email.js';
 import { broadcastMonitorProgress } from '../socket.js';
 import { hasAI, hasSMTP, config } from '../config.js';
 
 const router = Router();
 
 // 可直接下推 Prisma orderBy 的排序字段
-const DIRECT_SORTS = ['createdAt', 'publishedAt', 'confidence', 'hotScore', 'relevance'];
+const DIRECT_SORTS = ['createdAt', 'publishedAt', 'confidence', 'hotScore', 'relevance', 'favoritedAt'];
 
 /** 动态/JSON 指标排序（trending 智能热榜分 / likes / stars），缺失值统一排最后 */
 function applyCustomSort(list, sort, dir) {
@@ -75,14 +76,28 @@ router.delete('/keywords/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-// 立即执行一次关键词监控（执行期间通过 Socket.io 广播校验进度）
+// 立即执行一次关键词监控（进度定向推送给发起人；结果邮件聚合发送给发起人）
 router.post('/keywords/:id/run', async (req, res) => {
   const kw = await prisma.keyword.findUnique({ where: { id: req.params.id } });
   if (!kw) return res.status(404).json({ error: '关键词不存在' });
+  const userId = req.session?.userId;
   const result = await runMonitor(kw, (p) => {
     broadcastMonitorProgress({ keywordId: kw.id, keyword: kw.text, ...p });
   });
-  res.json(result);
+
+  if (config.email.mode === 'digest' && result.alerts?.length) {
+    try {
+      await sendAlertEmails(result.alerts, {
+        batchKey: `digest:manual:${Date.now()}`,
+        userIds: userId ? [userId] : undefined,
+      });
+    } catch (err) {
+      console.error('[api] 手动检查邮件发送失败:', err.message);
+    }
+  }
+
+  const { alerts, ...payload } = result;
+  res.json(payload);
 });
 
 // ===== 查询：命中 / 通知 =====
@@ -101,6 +116,8 @@ router.get('/alerts', async (req, res) => {
     minHot,
     maxHot,
     q,
+    includeHidden,
+    favoriteId,
     sort = 'createdAt',
     order = 'desc',
     page = '1',
@@ -116,10 +133,13 @@ router.get('/alerts', async (req, res) => {
     return Number.isNaN(d.getTime()) ? null : d;
   };
 
-  const where = {};
-  if (source) where.source = source;
-  if (isFake === 'true' || isFake === 'false') where.isFake = isFake === 'true';
-  if (keywordId) where.keywordId = keywordId;
+  const where = { AND: [] };
+  const and = where.AND;
+
+  if (source) and.push({ source });
+  if (isFake === 'true' || isFake === 'false') and.push({ isFake: isFake === 'true' });
+  if (keywordId) and.push({ keywordId });
+  if (favoriteId) and.push({ favoriteId });
 
   if (from || to) {
     const range = {};
@@ -127,7 +147,7 @@ router.get('/alerts', async (req, res) => {
     const t = dt(to);
     if (f) range.gte = f;
     if (t) range.lte = t;
-    if (Object.keys(range).length) where.createdAt = range;
+    if (Object.keys(range).length) and.push({ createdAt: range });
   }
 
   const cMin = num(minConfidence);
@@ -136,7 +156,7 @@ router.get('/alerts', async (req, res) => {
     const range = {};
     if (cMin != null) range.gte = cMin;
     if (cMax != null) range.lte = cMax;
-    where.confidence = range;
+    and.push({ confidence: range });
   }
 
   const hMin = num(minHot);
@@ -145,15 +165,23 @@ router.get('/alerts', async (req, res) => {
     const range = {};
     if (hMin != null) range.gte = hMin;
     if (hMax != null) range.lte = hMax;
-    where.hotScore = range;
+    and.push({ hotScore: range });
   }
 
   if (q) {
-    where.OR = [
-      { title: { contains: q } },
-      { snippet: { contains: q } },
-      { summary: { contains: q } },
-    ];
+    and.push({
+      OR: [
+        { title: { contains: q } },
+        { snippet: { contains: q } },
+        { summary: { contains: q } },
+      ],
+    });
+  }
+
+  // 信息生命周期：默认隐藏「超 N 天且未收藏」的内容；includeHidden=true 显示全部
+  if (includeHidden !== 'true') {
+    const ttlAgo = new Date(Date.now() - config.alertTtlDays * 86400 * 1000);
+    and.push({ OR: [{ createdAt: { gte: ttlAgo } }, { favoriteId: { not: null } }] });
   }
 
   const dir = order === 'asc' ? 'asc' : 'desc';
@@ -205,12 +233,76 @@ router.get('/stats', async (_req, res) => {
   res.json({ realAlerts, fakeAlerts, todayAlerts, enabledKeywords });
 });
 
-router.get('/notifications', async (_req, res) => {
+router.get('/notifications', async (req, res) => {
   const list = await prisma.notification.findMany({
+    // 本人通知 + 历史全局通知（userId 为空）
+    where: { OR: [{ userId: req.session?.userId || null }, { userId: null }] },
     orderBy: { createdAt: 'desc' },
     take: 50,
   });
   res.json(list);
+});
+
+// ===== 收藏夹 =====
+async function ensureDefaultFavorite() {
+  const existing = await prisma.favorite.findFirst({ where: { isDefault: true } });
+  if (existing) return existing;
+  return prisma.favorite.create({ data: { name: '默认收藏夹', isDefault: true } });
+}
+
+router.get('/favorites', async (_req, res) => {
+  await ensureDefaultFavorite();
+  const list = await prisma.favorite.findMany({
+    orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+    include: { _count: { select: { alerts: true } } },
+  });
+  res.json(list);
+});
+
+router.post('/favorites', async (req, res) => {
+  const { name } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ error: '收藏夹名称不能为空' });
+  res.json(await prisma.favorite.create({ data: { name: name.trim() } }));
+});
+
+router.patch('/favorites/:id', async (req, res) => {
+  const { name } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ error: '收藏夹名称不能为空' });
+  res.json(await prisma.favorite.update({ where: { id: req.params.id }, data: { name: name.trim() } }));
+});
+
+router.delete('/favorites/:id', async (req, res) => {
+  const fav = await prisma.favorite.findUnique({ where: { id: req.params.id } });
+  if (!fav) return res.status(404).json({ error: '收藏夹不存在' });
+  if (fav.isDefault) return res.status(400).json({ error: '默认收藏夹不可删除' });
+  await prisma.favorite.delete({ where: { id: req.params.id } });
+  res.json({ ok: true });
+});
+
+// 收藏到指定收藏夹（不传 favoriteId 则收藏到默认收藏夹）
+router.post('/alerts/:id/favorite', async (req, res) => {
+  const { favoriteId } = req.body || {};
+  let targetId = favoriteId;
+  if (targetId) {
+    const fav = await prisma.favorite.findUnique({ where: { id: targetId } });
+    if (!fav) return res.status(400).json({ error: '收藏夹不存在' });
+  } else {
+    targetId = (await ensureDefaultFavorite()).id;
+  }
+  const updated = await prisma.alert.update({
+    where: { id: req.params.id },
+    data: { favoriteId: targetId, favoritedAt: new Date() },
+  });
+  res.json(updated);
+});
+
+// 取消收藏
+router.delete('/alerts/:id/favorite', async (req, res) => {
+  const updated = await prisma.alert.update({
+    where: { id: req.params.id },
+    data: { favoriteId: null, favoritedAt: null },
+  });
+  res.json(updated);
 });
 
 // ===== 状态 =====

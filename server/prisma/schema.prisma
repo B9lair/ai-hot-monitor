@@ -37,19 +37,74 @@ model Alert {
   fakeReason       String?  // AI 判断疑似假冒/谣言的理由
   author           String?  // 作者 / UP 主名称
   publishedAt      DateTime?
+  favoriteId       String?  // 收藏夹外键（收藏 = 永久保留，不参与 7 天隐藏）
+  favorite         Favorite? @relation(fields: [favoriteId], references: [id], onDelete: SetNull)
+  favoritedAt      DateTime?  // 收藏时间（收藏夹内按此倒序）
+  normalizedUrl    String?  @unique  // 归一化 URL（去重依据）
   createdAt   DateTime  @default(now())
 
   @@index([keywordId, createdAt])
 }
 
+// 收藏夹
+model Favorite {
+  id        String   @id @default(cuid())
+  name      String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  alerts    Alert[]
+}
+
 // 通知记录
 model Notification {
-  id        String   @id @default(cuid())
-  type      String // alert
-  channel   String // email | browser
-  title     String
-  content   String
-  url       String?
-  status    String   @default("sent")
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  type       String // alert
+  channel    String // email | browser
+  title      String
+  content    String
+  url        String?
+  status     String   @default("sent") // sent | failed
+  error      String? // 发送失败原因
+  userId     String? // 归属用户（NULL = 历史全局通知 / 无用户时的回退）
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  recipient  String? // email 渠道的实际收件邮箱
+  itemCount  Int      @default(1) // 本封聚合的命中条数（digest）
+  batchKey   String? // 幂等键，如 digest:{roundId}
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// 用户（邮箱即身份）
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  notifyEmail  Boolean       @default(true) // 邮件通知开关（退订即置 false）
+  lastLoginAt  DateTime?
+  createdAt    DateTime      @default(now())
+  loginTokens  LoginToken[]
+  notifications Notification[]
+}
+
+// 会话（express-session 持久化，重启不掉线）
+model Session {
+  id        String   @id
+  data      String
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+// 登录令牌（Magic Link，仅存哈希）
+model LoginToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
 }

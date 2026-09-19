@@ -16,8 +16,13 @@ import {
   ClockIcon,
   CalendarIcon,
   ChevronRightIcon,
+  CoinIcon,
+  BookmarkIcon,
+  ShareIcon,
+  CircleDotIcon,
 } from './Icons.jsx';
 import { formatRelativeTime, formatDateTime, formatCount } from '../utils.js';
+import { api } from '../api.js';
 
 // 来源平台徽标配色（彩色徽章，便于一眼区分平台）
 const SOURCE_BADGE = {
@@ -48,14 +53,26 @@ const METRIC_META = {
   forks: { label: 'Fork', icon: GitForkIcon, cls: 'text-slate-400' },
   points: { label: '热度', icon: ArrowUpCircleIcon, cls: 'text-orange-500' },
   comments: { label: '评论', icon: MessageCircleIcon, cls: 'text-sky-500' },
+  coins: { label: '投币', icon: CoinIcon, cls: 'text-amber-500' },
+  favorites: { label: '收藏', icon: BookmarkIcon, cls: 'text-rose-500' },
+  danmaku: { label: '弹幕', icon: MessageCircleIcon, cls: 'text-sky-500' },
+  shares: { label: '分享', icon: ShareIcon, cls: 'text-slate-400' },
+  reposts: { label: '转发', icon: RepeatIcon, cls: 'text-emerald-500' },
+  watchers: { label: 'Watch', icon: EyeIcon, cls: 'text-slate-400' },
+  issues: { label: 'Issue', icon: CircleDotIcon, cls: 'text-slate-400' },
+  upvoteRatio: { label: '顶赞比', icon: ArrowUpCircleIcon, cls: 'text-orange-500', percent: true },
 };
 
 // 各源按此顺序展示互动指标（无指标则自动隐藏）
 const METRIC_ORDER = {
   Twitter: ['likes', 'retweets', 'replyCount', 'quoteCount', 'views', 'followers'],
-  GitHub: ['stars', 'forks'],
+  GitHub: ['stars', 'forks', 'watchers', 'issues'],
   HackerNews: ['points', 'comments'],
-  'B站': ['views'],
+  'B站': ['views', 'likes', 'coins', 'favorites', 'danmaku', 'comments', 'shares'],
+  微博: ['likes', 'comments', 'reposts'],
+  知乎: ['likes', 'comments'],
+  Reddit: ['likes', 'comments', 'upvoteRatio'],
+  V2EX: ['comments'],
 };
 
 function parseMetrics(alert) {
@@ -103,8 +120,48 @@ export default function AlertCard({ alert, showKeyword = true, detailExpanded, o
   const detailOpen = detailExpanded ?? selfDetail;
   const toggleDetail = () => (onToggleDetail ? onToggleDetail(alert.id) : setSelfDetail((v) => !v));
 
+  // 收藏（收藏 = 永久保留，不参与 7 天隐藏）
+  const [favId, setFavId] = useState(alert.favoriteId || null);
+  const [favList, setFavList] = useState([]);
+  const [favOpen, setFavOpen] = useState(false);
+  const isFav = Boolean(favId);
+
+  const toggleFav = async () => {
+    try {
+      if (isFav) {
+        await api.unfavoriteAlert(alert.id);
+        setFavId(null);
+        setFavOpen(false);
+        return;
+      }
+      let list = favList;
+      if (!list.length) {
+        list = await api.getFavorites();
+        setFavList(list);
+      }
+      if (list.length === 1) {
+        await api.favoriteAlert(alert.id, list[0].id);
+        setFavId(list[0].id);
+      } else if (list.length > 1) {
+        setFavOpen((v) => !v);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const pickFav = async (id) => {
+    try {
+      await api.favoriteAlert(alert.id, id);
+      setFavId(id);
+      setFavOpen(false);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const metrics = parseMetrics(alert);
-  const metricKeys = (METRIC_ORDER[alert.source] || []).filter((k) => Number.isFinite(metrics[k]));
+  const metricKeys = (METRIC_ORDER[alert.source] || []).filter((k) => Number.isFinite(metrics[k]) && metrics[k] > 0);
   const keyword = alert.keyword?.text || '';
   const domain = domainOf(alert.url);
   const badge = SOURCE_BADGE[alert.source] || 'bg-slate-50 text-slate-600 border-slate-100';
@@ -161,6 +218,35 @@ export default function AlertCard({ alert, showKeyword = true, detailExpanded, o
               </span>
             )}
             {domain && <span className="inline-flex items-center gap-1">· {domain}</span>}
+
+            {/* 收藏按钮 */}
+            <div className="relative ml-auto">
+              <button
+                onClick={toggleFav}
+                title={isFav ? '取消收藏' : '收藏'}
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-sans font-semibold cursor-pointer transition-colors ${
+                  isFav
+                    ? 'bg-mint-50 text-mint-600 border-mint-200'
+                    : 'bg-white text-slate-400 border-mint-100 hover:text-mint-600 hover:border-mint-300'
+                }`}
+              >
+                <BookmarkIcon width={12} height={12} />
+                {isFav ? '已收藏' : '收藏'}
+              </button>
+              {favOpen && (
+                <div className="absolute right-0 top-full mt-1 z-20 w-40 rounded-xl border border-mint-100 bg-white shadow-soft p-1">
+                  {favList.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => pickFav(f.id)}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-slate-600 hover:bg-mint-50 hover:text-mint-700 cursor-pointer"
+                    >
+                      {f.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 标题（含关键词高亮） */}
@@ -196,14 +282,15 @@ export default function AlertCard({ alert, showKeyword = true, detailExpanded, o
               {metricKeys.map((k) => {
                 const meta = METRIC_META[k];
                 const Icon = meta.icon;
+                const value = meta.percent ? `${Math.round(metrics[k] * 100)}%` : formatCount(metrics[k]);
                 return (
                   <span
                     key={k}
-                    title={`${meta.label} ${formatCount(metrics[k])}`}
+                    title={`${meta.label} ${value}`}
                     className={`inline-flex items-center gap-1 text-xs ${meta.cls}`}
                   >
                     <Icon width={13} height={13} />
-                    <span className="font-mono font-semibold">{formatCount(metrics[k])}</span>
+                    <span className="font-mono font-semibold">{value}</span>
                   </span>
                 );
               })}
