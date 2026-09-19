@@ -1,8 +1,8 @@
 import { prisma } from '../db.js';
 import { searchAll } from '../sources/index.js';
 import { computeHotScore, normalizeUrl } from '../sources/utils.js';
-import { verifyKeywordHit, isRelevantHit, mentionsKeyword } from '../ai/openrouter.js';
-import { expandQuery } from '../ai/query-expansion.js';
+import { verifyKeywordHit, isRelevantHit, mentionsKeyword } from '../ai/openrouter.ts';
+import { expandQuery } from '../ai/query-expansion.ts';
 import { config, hasAI } from '../config.js';
 import { notifyBrowser } from './notifier.js';
 import { sendAlertEmails } from './email.js';

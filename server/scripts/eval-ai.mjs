@@ -13,7 +13,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifyKeywordHit, isRelevantHit, judgeQuality } from '../src/ai/openrouter.js';
+import { verifyKeywordHit, isRelevantHit, judgeQuality } from '../src/ai/openrouter.ts';
 import { config, hasAI } from '../src/config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

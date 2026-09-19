@@ -1,24 +1,42 @@
-import { chat, parseJSON } from './openrouter.js';
+/**
+ * 查询扩展（Query Expansion，TypeScript）
+ * 用 AI 为关键词生成同义/变体查询词以提高检索召回；输出同样经 zod 校验。
+ */
+import { z } from 'zod';
+import { chat, parseJSON } from './openrouter.ts';
 import { config, hasAI } from '../config.js';
 
 /** 扩展词内存缓存：keyword -> string[]（进程级，重启后按需重新生成，成本极低） */
-const cache = new Map();
+const cache = new Map<string, string[]>();
+
+/** 模型可能返回 ["a","b"] 或 { queries: ["a","b"] }，统一归一化为字符串数组 */
+const queriesSchema = z.unknown().transform((v): string[] => {
+  const raw = Array.isArray(v)
+    ? v
+    : v !== null && typeof v === 'object'
+      ? (v as { queries?: unknown }).queries
+      : null;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => (typeof x === 'string' ? x : typeof x === 'number' ? String(x) : ''))
+    .map((s) => s.trim())
+    .filter(Boolean);
+});
 
 /**
  * 为关键词生成同义/变体查询词，用于提高搜索召回（Query Expansion）。
  * - 账号查询（@ 开头）不扩展；
  * - 关闭开关或无 AI 时返回空数组；
  * - 结果带内存缓存，每个关键词只生成一次。
- * @param {string} keyword
- * @returns {Promise<string[]>}
  */
-export async function expandQuery(keyword) {
+export async function expandQuery(keyword: string): Promise<string[]> {
   const k = String(keyword || '').trim();
   if (!k || k.startsWith('@')) return [];
   if (!config.sources.queryExpand || !hasAI()) return [];
-  if (cache.has(k)) return cache.get(k);
+  const cached = cache.get(k);
+  if (cached) return cached;
 
-  const limit = config.sources.queryExpandLimit;
+  const limit: number = config.sources.queryExpandLimit;
   const prompt = `你是搜索查询扩展助手。给定用户关注的关键词，请生成最多 ${limit} 个「同义 / 变体 / 更完整表述」的查询词，用于提高搜索召回（换一种说法、补全主体、口语/书面变体均可）。
 
 关键词：${k}
@@ -42,25 +60,18 @@ export async function expandQuery(keyword) {
       ],
       { json: true, max_tokens: 500 },
     );
-    const parsed = parseJSON(text);
-    const arr = Array.isArray(parsed) ? parsed : parsed?.queries;
-    const out = [
-      ...new Set(
-        (Array.isArray(arr) ? arr : [])
-          .map((s) => String(s).trim())
-          .filter((s) => s && s !== k),
-      ),
-    ].slice(0, limit);
+    const parsed = queriesSchema.parse(parseJSON(text));
+    const out = [...new Set(parsed.filter((s) => s !== k))].slice(0, limit);
     cache.set(k, out);
     return out;
   } catch (err) {
-    console.warn(`[query-expansion] 生成「${k}」扩展词失败:`, err.message);
+    console.warn(`[query-expansion] 生成「${k}」扩展词失败:`, (err as Error).message);
     cache.set(k, []);
     return [];
   }
 }
 
 /** 清空扩展词缓存（测试/调试用） */
-export function clearQueryExpansionCache() {
+export function clearQueryExpansionCache(): void {
   cache.clear();
 }

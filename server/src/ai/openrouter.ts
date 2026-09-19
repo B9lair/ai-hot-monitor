@@ -1,12 +1,34 @@
+/**
+ * AI 服务层（TypeScript）
+ *
+ * 本文件是项目里唯一直接依赖大模型输出的模块，因此对「模型返回值不可信」做了两层防护：
+ *   1. 语法层：parseJSON() 多级容错（代码块包裹 / 前后杂文 / 字符串内裸换行 / 尾逗号）
+ *   2. 语义层：zod schema 校验 + 类型安全强转（coerce01 / coerceBool），杜绝
+ *      「Boolean('false') === true 把真实内容误判为假冒」这类静默故障
+ */
 import axios from 'axios';
+import { z } from 'zod';
 import { config, hasAI } from '../config.js';
+
+export interface ChatMessage {
+  role: string;
+  content: string;
+}
+
+export interface ChatOptions {
+  /** 覆盖默认模型（如评估法官模型） */
+  model?: string;
+  temperature?: number;
+  max_tokens?: number;
+  /** 是否要求模型返回 JSON 对象（response_format） */
+  json?: boolean;
+  extra?: Record<string, unknown>;
+}
 
 /**
  * 调用 OpenRouter chat completion
- * @param {Array<{role: string, content: string}>} messages
- * @param {object} opts
  */
-export async function chat(messages, opts = {}) {
+export async function chat(messages: ChatMessage[], opts: ChatOptions = {}): Promise<string> {
   if (!hasAI()) {
     throw new Error('OpenRouter API Key 未配置，请在 .env 中填写 OPENROUTER_API_KEY');
   }
@@ -34,7 +56,7 @@ export async function chat(messages, opts = {}) {
 
   const choice = res.data?.choices?.[0];
   const message = choice?.message;
-  const content = message?.content?.trim();
+  const content: string | undefined = message?.content?.trim();
   if (!content) {
     // 推理模型（如 deepseek 系列）会先消耗 token 生成 reasoning，max_tokens 过小会导致
     // finish_reason=length 且 content 为空。给出更明确的诊断信息。
@@ -54,7 +76,7 @@ export async function chat(messages, opts = {}) {
  * 修复 LLM 生成的常见非法 JSON：字符串内裸换行/制表符、尾逗号。
  * 扫描时跟踪「是否位于字符串内」与转义状态，避免破坏合法内容。
  */
-function repairJSON(s) {
+function repairJSON(s: string): string {
   let out = '';
   let inStr = false;
   let esc = false;
@@ -91,13 +113,13 @@ function repairJSON(s) {
 /**
  * 解析 JSON 响应（容错：markdown 代码块包裹 / 前后杂文 / 裸换行 / 尾逗号）
  */
-export function parseJSON(text) {
+export function parseJSON(text: string): unknown {
   const cleaned = String(text || '')
     .replace(/```json/gi, '')
     .replace(/```/g, '')
     .trim();
 
-  const candidates = [cleaned];
+  const candidates: string[] = [cleaned];
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (match) candidates.push(match[0]);
 
@@ -117,25 +139,20 @@ export function parseJSON(text) {
  * 把数值夹在 0~1 之间。
  * 严格解析：只接受 number 或非空数字字符串（"0.95" 可用）；非法值回退默认值并告警，
  * 避免「模型返回非数字 → 静默兜底成 0 → 被误判为不相关」而毫无痕迹。
- * @param {unknown} v 原始值
- * @param {number} d 回退默认值
- * @param {string} [field] 字段名（传入则在非法时打告警日志）
  */
-function clamp01(v, d = 0, field = '') {
+export function coerce01(v: unknown, fallback = 0, field = ''): number {
   const n =
     typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v.trim()) : NaN;
   if (Number.isFinite(n)) return Math.min(1, Math.max(0, n));
-  if (field) console.warn(`[ai] 字段 ${field} 非法（${JSON.stringify(v)}），已回退默认值 ${d}`);
-  return d;
+  if (field) console.warn(`[ai] 字段 ${field} 非法（${JSON.stringify(v)}），已回退默认值 ${fallback}`);
+  return fallback;
 }
 
 /**
  * 严格布尔解析：模型可能把布尔值返回成字符串。
- * 修复 `Boolean("false") === true` 导致「真实内容被误判为疑似假冒、从而不发送通知」的静默故障。
- * @param {unknown} v 原始值
- * @param {boolean} d 无法识别时的回退值
+ * 修复 `Boolean('false') === true` 导致「真实内容被误判为疑似假冒、从而不发送通知」的静默故障。
  */
-function toBool(v, d = false) {
+export function coerceBool(v: unknown, fallback = false): boolean {
   if (typeof v === 'boolean') return v;
   if (typeof v === 'number') return v !== 0;
   if (typeof v === 'string') {
@@ -143,11 +160,118 @@ function toBool(v, d = false) {
     if (['true', '1', 'yes', 'y', '是', '真'].includes(s)) return true;
     if (['false', '0', 'no', 'n', '否', '假', ''].includes(s)) return false;
   }
-  return d;
+  return fallback;
 }
 
+/** 宽松文本：仅接受字符串，其余按原样降级（数字/布尔转字符串，对象丢弃） */
+function coerceText(v: unknown): string {
+  if (typeof v === 'string') return v;
+  if (v == null) return '';
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  return '';
+}
+
+// ===================== LLM 输出 schema（zod 语义校验） =====================
+
+/** 字段级 1~5 分（非法值回退 1） */
+function coerceScore15(v: unknown): number {
+  const n =
+    typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v.trim()) : NaN;
+  return Number.isFinite(n) ? Math.min(5, Math.max(1, Math.round(n))) : 1;
+}
+
+export interface VerifyResult {
+  relevance: number;
+  keywordMentioned: boolean;
+  matchType: string;
+  summary: string;
+  relevanceReason: string;
+  isFake: boolean;
+  confidence: number;
+  fakeReason: string;
+}
+
+export interface JudgeResult {
+  summaryScore: number;
+  reasonScore: number;
+  comment: string;
+}
+
+/**
+ * 原始返回字段全部**可选**（模型少给字段属常见情况），
+ * 再由 transform 统一归一化并补默认值 —— 这样字段缺失不会让整体校验失败。
+ */
+const rawVerifySchema = z
+  .object({
+    relevance: z.unknown(),
+    keywordMentioned: z.unknown(),
+    matchType: z.unknown(),
+    summary: z.unknown(),
+    relevanceReason: z.unknown(),
+    isFake: z.unknown(),
+    confidence: z.unknown(),
+    fakeReason: z.unknown(),
+  })
+  .partial();
+
+export const verifyResultSchema = rawVerifySchema.transform(
+  (o): VerifyResult => ({
+    relevance: coerce01(o.relevance, 0, 'relevance'),
+    keywordMentioned: coerceBool(o.keywordMentioned, false),
+    matchType: coerceText(o.matchType),
+    summary: coerceText(o.summary),
+    relevanceReason: coerceText(o.relevanceReason),
+    isFake: coerceBool(o.isFake, false),
+    confidence: coerce01(o.confidence, 0.5, 'confidence'),
+    fakeReason: coerceText(o.fakeReason),
+  }),
+);
+
+const rawJudgeSchema = z
+  .object({
+    summaryScore: z.unknown(),
+    reasonScore: z.unknown(),
+    comment: z.unknown(),
+  })
+  .partial();
+
+export const judgeResultSchema = rawJudgeSchema.transform(
+  (o): JudgeResult => ({
+    summaryScore: coerceScore15(o.summaryScore),
+    reasonScore: coerceScore15(o.reasonScore),
+    comment: coerceText(o.comment),
+  }),
+);
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * 校验并归一化「相关性 + 防伪」模型输出。
+ * 模型返回非对象（如数组/字符串）时按默认值兜底并告警，避免整轮流程崩溃。
+ */
+export function parseVerifyResult(raw: unknown): VerifyResult {
+  if (!isPlainObject(raw)) {
+    console.warn(`[ai] 相关性判定返回的不是 JSON 对象（${Array.isArray(raw) ? 'array' : typeof raw}），已按默认值兜底`);
+    return verifyResultSchema.parse({});
+  }
+  return verifyResultSchema.parse(raw);
+}
+
+/** 校验并归一化「AI 法官」输出 */
+export function parseJudgeResult(raw: unknown): JudgeResult {
+  if (!isPlainObject(raw)) {
+    console.warn(`[ai] 法官返回的不是 JSON 对象（${Array.isArray(raw) ? 'array' : typeof raw}），已按默认值兜底`);
+    return judgeResultSchema.parse({});
+  }
+  return judgeResultSchema.parse(raw);
+}
+
+// ===================== 关键词与相关性工具 =====================
+
 /** 拆分关键词为 token（按空白/常见分隔符；连字符等保留，如 GPT-5） */
-export function keywordTokens(keyword) {
+export function keywordTokens(keyword: string): string[] {
   return String(keyword || '')
     .split(/[\s,，、;；:：/|｜+]+/)
     .map((s) => s.trim())
@@ -158,11 +282,12 @@ export function keywordTokens(keyword) {
  * 廉价预过滤：标题/摘要命中关键词「任一有效 token」即放行（多词关键词更宽松）。
  * 有效 token = 长度>=2 且非纯数字/小数（如 "4.6" 不作为独立匹配词），
  * 避免 "Claude Sonnet 4.6" 因命中 "4.6" 而误放行无关内容。
- * @param {object} item 内容条目
- * @param {string} keyword 原始关键词
- * @param {string[]} [extras] 额外关键词（查询扩展词），token 池取其并集
  */
-export function mentionsKeyword(item, keyword, extras = []) {
+export function mentionsKeyword(
+  item: { title?: string; snippet?: string },
+  keyword: string,
+  extras: string[] = [],
+): boolean {
   const tokens = keywordTokens(keyword);
   for (const e of extras || []) tokens.push(...keywordTokens(e));
   if (tokens.length === 0) return true;
@@ -177,19 +302,25 @@ export function mentionsKeyword(item, keyword, extras = []) {
  * 相关性判定：AI 只输出 relevance 分数，服务端用阈值判定是否「相关」。
  * 消除 AI 布尔 isRelevant 与分数不一致的问题。
  */
-export function isRelevantHit(result, threshold = config.openrouter.relevanceThreshold) {
+export function isRelevantHit(
+  result: { relevance?: unknown } | null | undefined,
+  threshold: number = config.openrouter.relevanceThreshold,
+): boolean {
   const r = Number(result?.relevance);
   return Number.isFinite(r) && r >= threshold;
 }
 
+// ===================== AI 能力 =====================
+
 /**
  * 关键词防伪验证：判断一条内容与关键词的相关度，并识别假冒/谣言。
- * 只输出连续的 relevance 分数 + 证据化理由，不再输出 isRelevant 布尔。
- * @param {string} keyword
- * @param {{title: string, snippet?: string, source: string}} item
- * @returns {Promise<{relevance: number, keywordMentioned: boolean, matchType: string, summary: string, relevanceReason: string, isFake: boolean, confidence: number, fakeReason: string}>}
+ * 只输出连续的 relevance 分数 + 证据化理由，不再输出 isRelevant 布尔；
+ * 返回值经 zod 校验，字段类型与取值范围有保证。
  */
-export async function verifyKeywordHit(keyword, item) {
+export async function verifyKeywordHit(
+  keyword: string,
+  item: { title: string; snippet?: string; source: string },
+): Promise<VerifyResult> {
   const prompt = `你是一个严格的信息相关性审核助手。请判断下面这条内容与关键词「${keyword}」的关联程度，并评估其真实性。
 
 【相关性判定标准（务必严格遵守）】
@@ -226,25 +357,18 @@ export async function verifyKeywordHit(keyword, item) {
     ],
     { json: true, max_tokens: 2000 },
   );
-  const result = parseJSON(text);
-  return {
-    relevance: clamp01(result.relevance, 0, 'relevance'),
-    keywordMentioned: toBool(result.keywordMentioned),
-    matchType: String(result.matchType ?? ''),
-    summary: String(result.summary ?? ''),
-    relevanceReason: String(result.relevanceReason ?? ''),
-    isFake: toBool(result.isFake),
-    confidence: clamp01(result.confidence, 0.5, 'confidence'),
-    fakeReason: String(result.fakeReason ?? ''),
-  };
+  return parseVerifyResult(parseJSON(text));
 }
 
 /**
  * AI 法官：评估一条相关性判定结果的摘要/理由质量（1~5 分），用于离线回归。
  * 使用独立法官模型（config.openrouter.judgeModel，缺省回退到筛选模型），避免"自评偏差"。
- * @returns {Promise<{summaryScore: number, reasonScore: number, comment: string}>}
  */
-export async function judgeQuality(keyword, item, result) {
+export async function judgeQuality(
+  keyword: string,
+  item: { title: string; snippet?: string },
+  result: Pick<VerifyResult, 'relevance' | 'matchType' | 'summary' | 'relevanceReason'>,
+): Promise<JudgeResult> {
   const prompt = `你是一个严格的评估助手。请评估下面这条「相关性判定结果」的质量，从「是否围绕关键词、是否给出明确判断依据、是否可读」三个维度打分。
 
 关键词：${keyword}
@@ -269,12 +393,5 @@ AI 给出的相关理由：${result.relevanceReason}
     ],
     { json: true, max_tokens: 800, model: config.openrouter.judgeModel || undefined },
   );
-  const r = parseJSON(text);
-  return {
-    summaryScore: Math.min(5, Math.max(1, Number(r.summaryScore) || 1)),
-    reasonScore: Math.min(5, Math.max(1, Number(r.reasonScore) || 1)),
-    comment: String(r.comment ?? ''),
-  };
+  return parseJudgeResult(parseJSON(text));
 }
-
-
