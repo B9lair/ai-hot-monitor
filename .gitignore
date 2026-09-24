@@ -3,13 +3,17 @@ dist/
 .env
 *.db
 *.db-journal
+# 数据源运行时开关（前端面板切换后本地持久化，不纳入版本控制）
+server/.source-state.json
 .DS_Store
 .vite/
 .idea/
 
+# AI 评估产物（本地生成，可用 npm 脚本重新产出）
+server/src/ai/eval/seed-cases.json
+server/src/ai/eval/results/
+
 # 文档与本地资料（不纳入版本控制）
-skills/
-README.md
 STARTUP.md
 方案设计文档.md
 排序筛选功能方案.md

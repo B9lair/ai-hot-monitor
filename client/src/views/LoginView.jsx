@@ -141,7 +141,7 @@ export default function LoginView({ initialError = '', onClose }) {
           )}
         </div>
 
-        <p className="text-center text-[11px] text-slate-400 mt-4">不登录也能正常使用，登录后额外收到邮件通知</p>
+        <p className="text-center text-[11px] text-slate-400 mt-4">不登录也能正常使用，登录后可自定义邮件发送间隔与开关</p>
       </div>
     </div>
   );

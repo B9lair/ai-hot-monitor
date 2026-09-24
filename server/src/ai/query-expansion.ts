@@ -4,6 +4,7 @@
  */
 import { z } from 'zod';
 import { chat, parseJSON } from './openrouter.ts';
+import { queryExpansionPrompt } from './prompts.ts';
 import { config, hasAI } from '../config.js';
 
 /** 扩展词内存缓存：keyword -> string[]（进程级，重启后按需重新生成，成本极低） */
@@ -37,20 +38,7 @@ export async function expandQuery(keyword: string): Promise<string[]> {
   if (cached) return cached;
 
   const limit: number = config.sources.queryExpandLimit;
-  const prompt = `你是搜索查询扩展助手。给定用户关注的关键词，请生成最多 ${limit} 个「同义 / 变体 / 更完整表述」的查询词，用于提高搜索召回（换一种说法、补全主体、口语/书面变体均可）。
-
-关键词：${k}
-
-要求：
-1. 每个查询词都应仍指向同一主题/主体，不要偏离原意；
-2. 不要与关键词完全相同，不要生成过于宽泛的词；
-3. 直接返回 JSON 对象。
-
-示例：
-- 输入「鱼皮的 AI 导航」→ {"queries": ["程序员鱼皮的 AI 导航", "AI 导航 鱼皮", "鱼皮 AI 编程教程"]}
-- 输入「GPT-5」→ {"queries": ["GPT-5 发布", "OpenAI GPT-5", "GPT-5 模型"]}
-
-请严格只返回 JSON（不要输出任何其他文字）。`;
+  const prompt = queryExpansionPrompt(k, limit);
 
   try {
     const text = await chat(

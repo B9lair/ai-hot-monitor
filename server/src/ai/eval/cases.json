@@ -1,8 +1,154 @@
 {
   "threshold": 0.6,
+  "version": "v2.0",
+  "note": "金标准数据集（100 条）。覆盖 9 个关键词、9 个数据源；含正样本、普通负样本、困难负样本（同生态/同名歧义/版本号陷阱）与假冒样本。样本文案刻意保留真实爬虫抓取特征（截断、口语化、中英混排、平台后缀）。",
   "cases": [
     {
-      "id": "pos-claude-4.6",
+      "id": "gpt5-01",
+      "keyword": "GPT-5",
+      "title": "OpenAI 正式发布 GPT-5，推理能力大幅提升",
+      "snippet": "GPT-5 在推理基准上全面超越前代模型，并首次支持自适应思考时长。",
+      "source": "HackerNews",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本：关键词为核心主题"
+    },
+    {
+      "id": "gpt5-02",
+      "keyword": "GPT-5",
+      "title": "GPT-5 在 SWE-bench Verified 上刷新纪录",
+      "snippet": "GPT-5 取得了 74.9% 的解决率，显著领先此前所有模型。",
+      "source": "Twitter",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "gpt5-03",
+      "keyword": "GPT-5",
+      "title": "实测 GPT-5：代码生成质量横向对比",
+      "snippet": "作者用 20 个真实项目对比了 GPT-5 与竞品的代码生成质量。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本：关键词为核心评测对象"
+    },
+    {
+      "id": "gpt5-04",
+      "keyword": "GPT-5",
+      "title": "GPT-5 API 定价公布，输入价格较 GPT-4o 降低 40%",
+      "snippet": "developer.openai.com 文档已更新 GPT-5 的计费方式。",
+      "source": "GitHub",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "gpt5-05",
+      "keyword": "GPT-5",
+      "title": "GPT-4 微调指南更新：LoRA 与全参微调对比",
+      "snippet": "本文介绍如何对 GPT-4 进行指令微调，并比较两种方案的成本。",
+      "source": "百度",
+      "expectRelevant": false,
+      "note": "负样本：版本号不同（GPT-4 非 GPT-5）"
+    },
+    {
+      "id": "gpt5-06",
+      "keyword": "GPT-5",
+      "title": "GPT-4o 多模态能力深度评测",
+      "snippet": "GPT-4o 在图像理解与语音交互上的表现分析。",
+      "source": "知乎",
+      "expectRelevant": false,
+      "note": "困难负样本：同厂商不同型号，未提 GPT-5"
+    },
+    {
+      "id": "gpt5-07",
+      "keyword": "GPT-5",
+      "title": "OpenAI 发布新一代语音合成模型",
+      "snippet": "该模型在语音自然度上达到新水平。",
+      "source": "HackerNews",
+      "expectRelevant": false,
+      "note": "困难负样本：同厂商不同产品"
+    },
+    {
+      "id": "gpt5-08",
+      "keyword": "GPT-5",
+      "title": "如何用 GPT-3.5 搭建企业客服机器人",
+      "snippet": "从零开始介绍基于 GPT-3.5 的客服问答系统搭建流程。",
+      "source": "搜狗",
+      "expectRelevant": false,
+      "note": "负样本：旧版本型号"
+    },
+    {
+      "id": "gpt5-09",
+      "keyword": "GPT-5",
+      "title": "Claude 5 发布，多项基准超越前代",
+      "snippet": "Anthropic 称新模型在编程与长上下文任务上表现突出。",
+      "source": "Twitter",
+      "expectRelevant": false,
+      "note": "困难负样本：竞品新闻，全文未提 GPT-5"
+    },
+    {
+      "id": "gpt5-10",
+      "keyword": "GPT-5",
+      "title": "2026 年 AI 大模型横向评测：谁是最强模型",
+      "snippet": "本文对比了市面主流大模型的综合表现。",
+      "source": "微博",
+      "expectRelevant": false,
+      "note": "困难负样本：泛领域评测，未点名 GPT-5"
+    },
+    {
+      "id": "gpt5-11",
+      "keyword": "GPT-5",
+      "title": "GPT-5 已开放免费本地下载（非官方渠道）",
+      "snippet": "点击链接即可下载 GPT-5 本地部署包，无需联网。",
+      "source": "搜狗",
+      "expectRelevant": true,
+      "expectFake": true,
+      "note": "假冒样本：相关但为虚假引流（非官方渠道）"
+    },
+    {
+      "id": "gpt5-12",
+      "keyword": "GPT-5",
+      "title": "速看！GPT-5 内测邀请码免费领取",
+      "snippet": "限时放送 GPT-5 内测资格，先到先得。",
+      "source": "微博",
+      "expectRelevant": true,
+      "expectFake": true,
+      "note": "假冒样本：标题党 + 诱导"
+    },
+    {
+      "id": "gpt5-13",
+      "keyword": "GPT-5",
+      "title": "GPT-5 已被某高校团队完全破解并开源",
+      "snippet": "据称该团队已放出 GPT-5 完整权重。",
+      "source": "百度",
+      "expectRelevant": true,
+      "expectFake": true,
+      "note": "假冒样本：违背常识的重大宣称"
+    },
+    {
+      "id": "gpt5-14",
+      "keyword": "GPT-5",
+      "title": "OpenAI GPT-5 正式上线 ChatGPT Plus",
+      "snippet": "Plus 用户即日起可在模型选择器中切换到 GPT-5。",
+      "source": "Bing",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "gpt5-15",
+      "keyword": "GPT-5",
+      "title": "Sora 视频生成效果实测：物理一致性如何",
+      "snippet": "本文实测了视频生成模型的物理表现。",
+      "source": "B站",
+      "expectRelevant": false,
+      "note": "负样本：完全无关的另一产品"
+    },
+
+    {
+      "id": "claude-01",
       "keyword": "Claude Sonnet 4.6",
       "title": "Anthropic 发布 Claude Sonnet 4.6，推理与代码能力大幅提升",
       "snippet": "官方正式发布 Claude Sonnet 4.6，多模态与长上下文能力进一步增强。",
@@ -12,7 +158,37 @@
       "note": "正样本：明确提及关键词且为核心主题"
     },
     {
-      "id": "neg-openclaw",
+      "id": "claude-02",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "实测 Claude Sonnet 4.6：代码生成质量横向对比",
+      "snippet": "作者实测 Claude Sonnet 4.6 在 LeetCode 与真实项目上的表现。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "claude-03",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "Claude Sonnet 4.6 在 Aider 多语言编程榜登顶",
+      "snippet": "Claude Sonnet 4.6 刷新了该榜单的历史最好成绩。",
+      "source": "GitHub",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "claude-04",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "Claude Sonnet 4.6 现已向全部用户开放",
+      "snippet": "免费用户也可使用 Claude Sonnet 4.6。",
+      "source": "Twitter",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "claude-05",
       "keyword": "Claude Sonnet 4.6",
       "title": "OpenClaw 推出全新 agent 协作框架",
       "snippet": "OpenClaw 是一个开源的 Claude Code 替代品，本次更新优化了任务编排能力。",
@@ -21,63 +197,25 @@
       "note": "困难负样本：同生态但全文未提 Claude Sonnet 4.6"
     },
     {
-      "id": "neg-claude-code",
+      "id": "claude-06",
       "keyword": "Claude Sonnet 4.6",
       "title": "Claude Code 发布 3.0 版本",
       "snippet": "本次更新聚焦命令行交互体验与插件生态。",
       "source": "HackerNews",
       "expectRelevant": false,
-      "note": "同生态不同产品，未提关键词"
+      "note": "困难负样本：同生态不同产品，未提关键词"
     },
     {
-      "id": "pos-claude-实测",
+      "id": "claude-07",
       "keyword": "Claude Sonnet 4.6",
-      "title": "实测 Claude Sonnet 4.6：代码生成质量横向对比",
-      "snippet": "作者实测 Claude Sonnet 4.6 在 LeetCode 与真实项目上的表现。",
-      "source": "知乎",
-      "expectRelevant": true,
-      "note": "正样本：关键词为核心评测对象"
-    },
-    {
-      "id": "pos-gpt5",
-      "keyword": "GPT-5",
-      "title": "OpenAI 正式发布 GPT-5",
-      "snippet": "GPT-5 在推理基准上全面超越前代模型。",
-      "source": "Twitter",
-      "expectRelevant": true,
-      "expectFake": false,
-      "note": "正样本"
-    },
-    {
-      "id": "neg-gpt4",
-      "keyword": "GPT-5",
-      "title": "GPT-4 微调指南更新",
-      "snippet": "介绍如何对 GPT-4 进行指令微调。",
-      "source": "百度",
+      "title": "Claude 4.5 使用体验分享",
+      "snippet": "使用 Claude 4.5 三个月的真实感受。",
+      "source": "微博",
       "expectRelevant": false,
-      "note": "负样本：不同版本（GPT-4 vs GPT-5）"
+      "note": "困难负样本：版本号不同（4.5 vs 4.6）"
     },
     {
-      "id": "fake-gpt5-download",
-      "keyword": "GPT-5",
-      "title": "GPT-5 已开放免费本地下载（非官方渠道）",
-      "snippet": "点击链接即可下载 GPT-5 本地部署包。",
-      "source": "搜狗",
-      "expectRelevant": true,
-      "expectFake": true,
-      "note": "疑似标题党/虚假信息（相关但为假）"
-    },
-    {
-      "id": "pos-openai",
-      "keyword": "OpenAI",
-      "title": "OpenAI 宣布完成新一轮融资",
-      "snippet": "OpenAI 完成融资，估值继续攀升。",
-      "source": "Bing",
-      "expectRelevant": true,
-      "note": "正样本：品牌词为核心主体"
-    },
-    {
-      "id": "neg-ai-tool-review",
+      "id": "claude-08",
       "keyword": "Claude Sonnet 4.6",
       "title": "AI 编程助手横向对比评测",
       "snippet": "对比了 GitHub Copilot、Cursor 等主流工具。",
@@ -86,13 +224,750 @@
       "note": "负样本：仅同领域，未提关键词"
     },
     {
-      "id": "neg-sora-video",
-      "keyword": "Sora",
-      "title": "视频生成模型技术综述",
-      "snippet": "盘点近期文生视频模型的进展。",
+      "id": "claude-09",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "Anthropic 完成新一轮融资，估值继续攀升",
+      "snippet": "本轮融资由多家机构参与。",
+      "source": "Bing",
+      "expectRelevant": false,
+      "note": "困难负样本：同公司不同事件，与模型无关"
+    },
+    {
+      "id": "claude-10",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "Claude Sonnet 4.6 vs GPT-5：编程任务实测对比",
+      "snippet": "在 15 个真实编程任务上对比两个模型。",
+      "source": "B站",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本：关键词为核心对比对象之一"
+    },
+    {
+      "id": "claude-11",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "音乐术语 Sonnet 的起源与演变",
+      "snippet": "Sonnet 作为一种古典体裁的历史渊源。",
+      "source": "搜狗",
+      "expectRelevant": false,
+      "note": "困难负样本：同名歧义（Sonnet 为文学/音乐体裁）"
+    },
+    {
+      "id": "claude-12",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "Claude Sonnet 4.6 免费无限量 API 泄露版流出",
+      "snippet": "附下载地址，声称可无限调用。",
+      "source": "百度",
+      "expectRelevant": true,
+      "expectFake": true,
+      "note": "假冒样本：泄露/破解类虚假信息"
+    },
+    {
+      "id": "claude-13",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "Anthropic 官方文档更新：Claude Sonnet 4.6 支持 1M 上下文",
+      "snippet": "官方文档确认 Claude Sonnet 4.6 的上下文窗口扩展至 100 万 token。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本：官方文档类"
+    },
+    {
+      "id": "claude-14",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "MCP 协议在 Claude 生态中的应用实践",
+      "snippet": "介绍如何为 Claude 客户端开发 MCP 服务。",
       "source": "知乎",
       "expectRelevant": false,
-      "note": "负样本：泛领域综述，未提关键词"
+      "note": "困难负样本：提及 Claude 生态但未提 Sonnet 4.6（预过滤会放行，需 AI 正确判否）"
+    },
+    {
+      "id": "claude-15",
+      "keyword": "Claude Sonnet 4.6",
+      "title": "Claude Sonnet 4.6 正式上线 Amazon Bedrock",
+      "snippet": "企业用户可在 Bedrock 中调用该模型。",
+      "source": "Bing",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+
+    {
+      "id": "sora-01",
+      "keyword": "Sora",
+      "title": "OpenAI 发布 Sora 2，视频生成能力再升级",
+      "snippet": "Sora 2 在物理一致性与镜头控制上有明显改进。",
+      "source": "HackerNews",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "sora-02",
+      "keyword": "Sora",
+      "title": "Sora 生成视频实测：物理一致性明显提升",
+      "snippet": "用 Sora 生成了 30 段视频并逐段分析。",
+      "source": "B站",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "sora-03",
+      "keyword": "Sora",
+      "title": "Sora 现已向 ChatGPT Plus 用户开放",
+      "snippet": "订阅用户可直接在 ChatGPT 中使用 Sora。",
+      "source": "Twitter",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "sora-04",
+      "keyword": "Sora",
+      "title": "视频生成模型技术综述：从 GAN 到扩散模型",
+      "snippet": "盘点文生视频模型的技术演进路线。",
+      "source": "知乎",
+      "expectRelevant": false,
+      "note": "负样本：泛领域综述，未提 Sora"
+    },
+    {
+      "id": "sora-05",
+      "keyword": "Sora",
+      "title": "Runway Gen-4 发布，对标 Sora",
+      "snippet": "Runway 称新模型在可控性上超过 Sora。",
+      "source": "微博",
+      "expectRelevant": false,
+      "note": "边界负样本：Sora 仅作为对比对象被顺带提及，非核心主题（relevance 应在 0.3~0.6）"
+    },
+    {
+      "id": "sora-06",
+      "keyword": "Sora",
+      "title": "Sora 在日语中的含义与常见用法",
+      "snippet": "Sora（そら）在日语中意为天空。",
+      "source": "百度",
+      "expectRelevant": false,
+      "note": "困难负样本：同名歧义（日语词汇）"
+    },
+    {
+      "id": "sora-07",
+      "keyword": "Sora",
+      "title": "Sora 航空获得新一轮战略投资",
+      "snippet": "该航空公司计划扩充机队。",
+      "source": "搜狗",
+      "expectRelevant": false,
+      "note": "困难负样本：同名企业"
+    },
+    {
+      "id": "sora-08",
+      "keyword": "Sora",
+      "title": "Sora 无限时长视频生成破解版下载",
+      "snippet": "号称已解除所有时长限制。",
+      "source": "百度",
+      "expectRelevant": true,
+      "expectFake": true,
+      "note": "假冒样本：破解版引流"
+    },
+    {
+      "id": "sora-09",
+      "keyword": "Sora",
+      "title": "Sora 2 支持最长 60 秒高清视频生成",
+      "snippet": "官方更新说明确认了时长上限。",
+      "source": "Bing",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "sora-10",
+      "keyword": "Sora",
+      "title": "Midjourney 推出视频生成功能",
+      "snippet": "该功能目前处于内测阶段。",
+      "source": "HackerNews",
+      "expectRelevant": false,
+      "note": "负样本：竞品动态，未提 Sora"
+    },
+    {
+      "id": "sora-11",
+      "keyword": "Sora",
+      "title": "Sora 在广告行业的落地案例盘点",
+      "snippet": "多家广告公司已用 Sora 制作分镜与素材。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "sora-12",
+      "keyword": "Sora",
+      "title": "2026 年 AI 视频生成工具榜单",
+      "snippet": "综合评测了市面上的视频生成工具。",
+      "source": "微博",
+      "expectRelevant": false,
+      "note": "负样本：泛榜单，未点名 Sora"
+    },
+
+    {
+      "id": "mcp-01",
+      "keyword": "MCP",
+      "title": "一文讲清什么是 MCP（Model Context Protocol）",
+      "snippet": "MCP 是 Anthropic 提出的开放协议，用于让模型连接外部工具与数据。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本：关键词为核心主题"
+    },
+    {
+      "id": "mcp-02",
+      "keyword": "MCP",
+      "title": "MCP 官方规范更新：新增资源订阅能力",
+      "snippet": "规范新增 resources/subscribe 方法。",
+      "source": "GitHub",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "mcp-03",
+      "keyword": "MCP",
+      "title": "Claude Code 使用 MCP 实战教程",
+      "snippet": "从零配置一个 MCP Server 并接入 Claude Code。",
+      "source": "B站",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "mcp-04",
+      "keyword": "MCP",
+      "title": "MCP Server 生态盘点：Top 20 常用服务",
+      "snippet": "整理了 GitHub 上最受欢迎的 MCP Server。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "mcp-05",
+      "keyword": "MCP",
+      "title": "WMS 仓储管理系统选型指南",
+      "snippet": "对比主流仓储管理系统的功能与价格。",
+      "source": "百度",
+      "expectRelevant": false,
+      "note": "负样本：完全无关"
+    },
+    {
+      "id": "mcp-06",
+      "keyword": "MCP",
+      "title": "MCP 认证考试报名通道开启",
+      "snippet": "微软认证专家（MCP）报名流程说明。",
+      "source": "搜狗",
+      "expectRelevant": false,
+      "note": "困难负样本：同名歧义（Microsoft Certified Professional）"
+    },
+    {
+      "id": "mcp-07",
+      "keyword": "MCP",
+      "title": "自媒体内容平台运营技巧分享",
+      "snippet": "如何提升账号内容曝光。",
+      "source": "微博",
+      "expectRelevant": false,
+      "note": "负样本：完全无关"
+    },
+    {
+      "id": "mcp-08",
+      "keyword": "MCP",
+      "title": "如何在 Cursor 中配置 MCP 服务器",
+      "snippet": "本文介绍 Cursor 的 MCP 配置方法。",
+      "source": "Bing",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "mcp-09",
+      "keyword": "MCP",
+      "title": "MCP 与 Function Calling 的区别与联系",
+      "snippet": "两者在工具调用场景下的定位差异。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "mcp-10",
+      "keyword": "MCP",
+      "title": "微控制器 MCU 选型指南",
+      "snippet": "嵌入式开发中 MCU 的选型要点。",
+      "source": "百度",
+      "expectRelevant": false,
+      "note": "困难负样本：形近词 MCU"
+    },
+    {
+      "id": "mcp-11",
+      "keyword": "MCP",
+      "title": "MCP 一键部署工具包免费领取（含破解插件）",
+      "snippet": "扫码进群即可领取。",
+      "source": "微博",
+      "expectRelevant": true,
+      "expectFake": true,
+      "note": "假冒样本：引流 + 破解"
+    },
+    {
+      "id": "mcp-12",
+      "keyword": "MCP",
+      "title": "GitHub 上最受欢迎的 10 个 MCP 项目",
+      "snippet": "按 Star 数排序的 MCP 开源项目推荐。",
+      "source": "GitHub",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "mcp-13",
+      "keyword": "MCP",
+      "title": "MPC 模型预测控制入门教程",
+      "snippet": "控制理论中 MPC 的基本原理。",
+      "source": "搜狗",
+      "expectRelevant": false,
+      "note": "困难负样本：形近词 MPC"
+    },
+    {
+      "id": "mcp-14",
+      "keyword": "MCP",
+      "title": "MCP 协议安全性分析与最佳实践",
+      "snippet": "分析 MCP 在权限与提示注入方面的风险。",
+      "source": "HackerNews",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+
+    {
+      "id": "agentic-01",
+      "keyword": "Agentic Coding 智能体开发",
+      "title": "Agentic Coding 正在重塑软件工程流程",
+      "snippet": "越来越多团队把 Agentic Coding 引入日常研发。",
+      "source": "HackerNews",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "agentic-02",
+      "keyword": "Agentic Coding 智能体开发",
+      "title": "智谱 ZCode：面向 Agent 全流程开发的 AI 智能体开发环境",
+      "snippet": "ZCode 支持自然语言下达需求，AI 自主完成拆解、编码、调试与提交。",
+      "source": "微博",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本：含「智能体开发」核心词"
+    },
+    {
+      "id": "agentic-03",
+      "keyword": "Agentic Coding 智能体开发",
+      "title": "Anthropic 访谈 15 家公司整理出 Agentic Coding 实操指南",
+      "snippet": "所谓 Agentic Coding，就是让 Agent 深度参与代码开发。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "agentic-04",
+      "keyword": "Agentic Coding 智能体开发",
+      "title": "Coding Agent 基础原理与工程实践",
+      "snippet": "讲解 Coding Agent 的上下文管理与工具调用机制。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本：Coding Agent 是核心主题"
+    },
+    {
+      "id": "agentic-05",
+      "keyword": "Agentic Coding 智能体开发",
+      "title": "Vibe Coding 成 AI 主战场，22 个明星玩家值得关注",
+      "snippet": "盘点 Vibe Coding 赛道的主要参与者。",
+      "source": "百度",
+      "expectRelevant": false,
+      "note": "困难负样本：含 Coding 但主题是 Vibe Coding，未提 Agentic Coding 或智能体开发"
+    },
+    {
+      "id": "agentic-06",
+      "keyword": "Agentic Coding 智能体开发",
+      "title": "低代码平台选型指南 2026",
+      "snippet": "对比主流低代码平台的能力边界。",
+      "source": "搜狗",
+      "expectRelevant": false,
+      "note": "负样本：完全无关"
+    },
+    {
+      "id": "agentic-07",
+      "keyword": "Agentic Coding 智能体开发",
+      "title": "Agentic Coding 在大型代码库中的落地实践",
+      "snippet": "分享在百万行代码库中引入 Agentic Coding 的经验。",
+      "source": "GitHub",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "agentic-08",
+      "keyword": "Agentic Coding 智能体开发",
+      "title": "零基础七天速成 Agentic Coding，月入三万",
+      "snippet": "报名课程即可获得内推机会。",
+      "source": "微博",
+      "expectRelevant": true,
+      "expectFake": true,
+      "note": "假冒样本：标题党 + 卖课引流"
+    },
+    {
+      "id": "agentic-09",
+      "keyword": "Agentic Coding 智能体开发",
+      "title": "敏捷开发与 Scrum 最佳实践",
+      "snippet": "团队协作流程的优化经验。",
+      "source": "百度",
+      "expectRelevant": false,
+      "note": "负样本：传统开发流程，无关"
+    },
+    {
+      "id": "agentic-10",
+      "keyword": "Agentic Coding 智能体开发",
+      "title": "普通 AI 辅助编程已经过时了吗",
+      "snippet": "讨论补全式工具与 Agent 式开发的差异。",
+      "source": "知乎",
+      "expectRelevant": false,
+      "note": "困难负样本：同领域讨论，但未提关键词"
+    },
+    {
+      "id": "agentic-11",
+      "keyword": "Agentic Coding 智能体开发",
+      "title": "智能体开发框架对比：LangGraph vs AutoGen",
+      "snippet": "对比两个主流智能体开发框架的编排能力。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本：含「智能体开发」"
+    },
+    {
+      "id": "agentic-12",
+      "keyword": "Agentic Coding 智能体开发",
+      "title": "2026 年前端开发趋势展望",
+      "snippet": "前端技术栈的演进方向。",
+      "source": "Bing",
+      "expectRelevant": false,
+      "note": "负样本：完全无关"
+    },
+
+    {
+      "id": "ds-01",
+      "keyword": "DeepSeek",
+      "title": "DeepSeek 发布 V4 模型并开源权重",
+      "snippet": "DeepSeek 在 HuggingFace 上放出了完整权重。",
+      "source": "HackerNews",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "ds-02",
+      "keyword": "DeepSeek",
+      "title": "DeepSeek API 价格再次下调",
+      "snippet": "DeepSeek 官方宣布输入输出价格同步下调。",
+      "source": "Twitter",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "ds-03",
+      "keyword": "DeepSeek",
+      "title": "DeepSeek-R2 推理能力实测",
+      "snippet": "在数学与代码推理任务上测试 DeepSeek-R2。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "ds-04",
+      "keyword": "DeepSeek",
+      "title": "某 AI 独角兽完成 C 轮融资",
+      "snippet": "本轮由多家机构联合投资。",
+      "source": "百度",
+      "expectRelevant": false,
+      "note": "负样本：未提 DeepSeek"
+    },
+    {
+      "id": "ds-05",
+      "keyword": "DeepSeek",
+      "title": "通义千问 Qwen 3 正式发布",
+      "snippet": "阿里发布新一代开源模型 Qwen 3。",
+      "source": "知乎",
+      "expectRelevant": false,
+      "note": "困难负样本：国产竞品，未提 DeepSeek"
+    },
+    {
+      "id": "ds-06",
+      "keyword": "DeepSeek",
+      "title": "DeepSeek 官方宣布模型全面免费且无限量",
+      "snippet": "声称企业级 API 也完全免费。",
+      "source": "微博",
+      "expectRelevant": true,
+      "expectFake": true,
+      "note": "假冒样本：明显违背商业常识的宣称"
+    },
+    {
+      "id": "ds-07",
+      "keyword": "DeepSeek",
+      "title": "DeepSeek 开源新的 MoE 架构",
+      "snippet": "新技术报告披露了路由策略细节。",
+      "source": "GitHub",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "ds-08",
+      "keyword": "DeepSeek",
+      "title": "ChatGPT 免费版功能更新汇总",
+      "snippet": "OpenAI 为免费用户开放了更多能力。",
+      "source": "搜狗",
+      "expectRelevant": false,
+      "note": "负样本：竞品更新"
+    },
+    {
+      "id": "ds-09",
+      "keyword": "DeepSeek",
+      "title": "DeepSeek 模型本地部署显存需求实测",
+      "snippet": "实测不同量化精度下 DeepSeek 的显存占用。",
+      "source": "B站",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "ds-10",
+      "keyword": "DeepSeek",
+      "title": "深度搜索技术在企业知识库中的应用",
+      "snippet": "介绍企业级检索增强方案。",
+      "source": "百度",
+      "expectRelevant": false,
+      "note": "困难负样本：中文形近（深度搜索 ≠ DeepSeek）"
+    },
+
+    {
+      "id": "gemini-01",
+      "keyword": "Gemini",
+      "title": "Google 发布 Gemini 3，多模态能力领先",
+      "snippet": "Gemini 3 在视频理解与长文档任务上表现突出。",
+      "source": "HackerNews",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "gemini-02",
+      "keyword": "Gemini",
+      "title": "Gemini 3 在 LMArena 排行榜登顶",
+      "snippet": "Gemini 3 的 Elo 分数创下新高。",
+      "source": "Twitter",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "gemini-03",
+      "keyword": "Gemini",
+      "title": "Gemini API 免费额度提升",
+      "snippet": "开发者可申请的 Gemini 免费调用量翻倍。",
+      "source": "Bing",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "gemini-04",
+      "keyword": "Gemini",
+      "title": "Google 搜索算法更新说明",
+      "snippet": "本次更新影响内容站排名。",
+      "source": "百度",
+      "expectRelevant": false,
+      "note": "负样本：同公司不同产品"
+    },
+    {
+      "id": "gemini-05",
+      "keyword": "Gemini",
+      "title": "Google Assistant 将于年底停止服务",
+      "snippet": "官方建议用户迁移至 Gemini。",
+      "source": "搜狗",
+      "expectRelevant": false,
+      "note": "困难负样本：仅末尾顺带提及 Gemini，主体是 Assistant 停服"
+    },
+    {
+      "id": "gemini-06",
+      "keyword": "Gemini",
+      "title": "Gemini 3 破解版无限调用教程",
+      "snippet": "附脚本与代理配置。",
+      "source": "微博",
+      "expectRelevant": true,
+      "expectFake": true,
+      "note": "假冒样本：破解教程引流"
+    },
+    {
+      "id": "gemini-07",
+      "keyword": "Gemini",
+      "title": "Gemini 3 与 GPT-5 基准测试对比",
+      "snippet": "在多项基准上对比两个模型。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "gemini-08",
+      "keyword": "Gemini",
+      "title": "双子座本周运势详解",
+      "snippet": "双子座本周事业与感情运程。",
+      "source": "微博",
+      "expectRelevant": false,
+      "note": "困难负样本：同名歧义（Gemini 即双子座）"
+    },
+
+    {
+      "id": "cursor-01",
+      "keyword": "Cursor",
+      "title": "Cursor 2.0 发布，支持多智能体协作",
+      "snippet": "Cursor 2.0 引入了多 Agent 并行处理能力。",
+      "source": "HackerNews",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "cursor-02",
+      "keyword": "Cursor",
+      "title": "Cursor 编辑器高效使用技巧合集",
+      "snippet": "整理了 Cursor 的快捷键与工作流技巧。",
+      "source": "B站",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "cursor-03",
+      "keyword": "Cursor",
+      "title": "Cursor 完成新一轮融资，估值翻倍",
+      "snippet": "Cursor 母公司 Anysphere 确认融资消息。",
+      "source": "Twitter",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "cursor-04",
+      "keyword": "Cursor",
+      "title": "CSS cursor 属性使用详解",
+      "snippet": "讲解 cursor 属性的各种取值与兼容性。",
+      "source": "百度",
+      "expectRelevant": false,
+      "note": "困难负样本：同名歧义（CSS 属性）"
+    },
+    {
+      "id": "cursor-05",
+      "keyword": "Cursor",
+      "title": "2026 年 VS Code 插件推荐",
+      "snippet": "提升开发效率的 VS Code 插件清单。",
+      "source": "知乎",
+      "expectRelevant": false,
+      "note": "困难负样本：同赛道竞品，未提 Cursor"
+    },
+    {
+      "id": "cursor-06",
+      "keyword": "Cursor",
+      "title": "鼠标指针样式自定义教程",
+      "snippet": "如何替换系统鼠标指针。",
+      "source": "搜狗",
+      "expectRelevant": false,
+      "note": "困难负样本：cursor 的字面含义"
+    },
+    {
+      "id": "cursor-07",
+      "keyword": "Cursor",
+      "title": "Cursor 与 Claude Code 对比实测",
+      "snippet": "在真实项目中对比两款工具的效率。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "cursor-08",
+      "keyword": "Cursor",
+      "title": "Cursor 永久免费激活码分享",
+      "snippet": "附激活教程与下载地址。",
+      "source": "微博",
+      "expectRelevant": true,
+      "expectFake": true,
+      "note": "假冒样本：盗版激活码引流"
+    },
+
+    {
+      "id": "doubao-01",
+      "keyword": "豆包",
+      "title": "字节跳动豆包大模型发布新版本",
+      "snippet": "新版豆包在推理与多模态上均有提升。",
+      "source": "百度",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "doubao-02",
+      "keyword": "豆包",
+      "title": "豆包 App 上线实时语音对话功能",
+      "snippet": "豆包客户端新增端到端语音交互。",
+      "source": "微博",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "doubao-03",
+      "keyword": "豆包",
+      "title": "红豆包子做法大全",
+      "snippet": "详细步骤教你做出松软的红豆包子。",
+      "source": "搜狗",
+      "expectRelevant": false,
+      "note": "困难负样本：字面命中但是食物（预过滤会放行，需 AI 正确判否）"
+    },
+    {
+      "id": "doubao-04",
+      "keyword": "豆包",
+      "title": "字节跳动加码电商业务",
+      "snippet": "该部门将独立运营。",
+      "source": "Bing",
+      "expectRelevant": false,
+      "note": "困难负样本：同公司不同业务"
+    },
+    {
+      "id": "doubao-05",
+      "keyword": "豆包",
+      "title": "豆包大模型 API 接入教程",
+      "snippet": "介绍豆包开放平台的鉴权与调用方式。",
+      "source": "知乎",
+      "expectRelevant": true,
+      "expectFake": false,
+      "note": "正样本"
+    },
+    {
+      "id": "doubao-06",
+      "keyword": "豆包",
+      "title": "豆包会员免费领取一年（点击链接领取）",
+      "snippet": "限量名额，先到先得。",
+      "source": "微博",
+      "expectRelevant": true,
+      "expectFake": true,
+      "note": "假冒样本：诱导点击的虚假福利"
     }
   ]
 }

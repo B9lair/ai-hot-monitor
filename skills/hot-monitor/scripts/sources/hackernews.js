@@ -1,0 +1,34 @@
+import { config } from '../config.js';
+import { http, normalize } from './utils.js';
+
+/**
+ * Hacker News 搜索（使用 Algolia 官方 API，无需 key）
+ */
+export async function searchHackerNews(query, limit = 20) {
+  const s = config.sources;
+  const hours = s.timeWindowBySource?.HackerNews ?? s.timeWindowHours;
+  const since = Math.floor(Date.now() / 1000) - Math.max(1, hours) * 3600;
+
+  const res = await http.get('https://hn.algolia.com/api/v1/search', {
+    params: {
+      query,
+      hitsPerPage: limit,
+      tags: 'story',
+      numericFilters: `created_at_i>${since}`,
+    },
+  });
+  const hits = res.data?.hits || [];
+  return hits
+    .map((h) =>
+      normalize({
+        title: h.title || h.story_title,
+        url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
+        snippet: h.story_text ? String(h.story_text).slice(0, 200) : '',
+        source: 'HackerNews',
+        publishedAt: h.created_at ? new Date(h.created_at) : null,
+        author: h.author || '',
+        metrics: { points: h.points || 0, comments: h.num_comments || 0 },
+      }),
+    )
+    .filter((i) => i.title);
+}

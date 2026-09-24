@@ -12,7 +12,8 @@ model Keyword {
   id          String   @id @default(cuid())
   text        String   @unique
   enabled     Boolean  @default(true)
-  intervalMin Int      @default(5)
+  intervalMin Int      @default(60) // 抓取间隔（分钟），默认 1 小时
+  lastRunAt   DateTime? // 上次运行时间：调度器据此判断是否到期
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   alerts      Alert[]
@@ -81,6 +82,8 @@ model User {
   id           String        @id @default(cuid())
   email        String        @unique
   notifyEmail  Boolean       @default(true) // 邮件通知开关（退订即置 false）
+  emailIntervalMin Int       @default(60)   // 邮件汇总发送间隔（分钟）
+  lastEmailAt  DateTime?                    // 上次成功发送汇总邮件的时间（null = 从未发过）
   lastLoginAt  DateTime?
   createdAt    DateTime      @default(now())
   loginTokens  LoginToken[]

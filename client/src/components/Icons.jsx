@@ -307,3 +307,11 @@ export const CircleDotIcon = (p) => (
     <circle cx="12" cy="12" r="1" fill="currentColor" />
   </svg>
 );
+
+export const DatabaseIcon = (p) => (
+  <svg {...base(p)}>
+    <ellipse cx="12" cy="5" rx="9" ry="3" />
+    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+    <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
+  </svg>
+);

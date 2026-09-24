@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { getSourceEnabled } from './state.js';
 import { searchHackerNews } from './hackernews.js';
 import { searchMultiEngines } from './websearch.js';
 import { searchTwitter } from './twitter.js';
@@ -23,7 +24,7 @@ function dedupe(items) {
 
 /** 并行执行已启用源的任务，单个源失败不影响整体 */
 async function runAll(tasks) {
-  const enabled = config.sources.enabled;
+  const enabled = getSourceEnabled();
   const active = tasks.filter((t) => (t.key ? enabled[t.key] : true));
 
   const results = await Promise.allSettled(active.map((t) => t.run()));

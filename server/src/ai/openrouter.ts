@@ -9,6 +9,9 @@
 import axios from 'axios';
 import { z } from 'zod';
 import { config, hasAI } from '../config.js';
+import { PROMPT_VERSION, relevancePrompt, authenticityPrompt, judgePrompt } from './prompts.ts';
+
+export { PROMPT_VERSION };
 
 export interface ChatMessage {
   role: string;
@@ -25,51 +28,141 @@ export interface ChatOptions {
   extra?: Record<string, unknown>;
 }
 
+// ===================== 调用统计与失败重试 =====================
+
 /**
- * 调用 OpenRouter chat completion
+ * AI 调用统计（进程级）。
+ * 不改变任何函数签名，离线评估脚本可据此输出「调用次数 / 重试 / 失败 / token / 耗时」等成本指标。
+ */
+export const aiStats = {
+  calls: 0,
+  retries: 0,
+  failures: 0,
+  promptTokens: 0,
+  completionTokens: 0,
+  totalMs: 0,
+};
+
+export function resetAiStats(): void {
+  aiStats.calls = 0;
+  aiStats.retries = 0;
+  aiStats.failures = 0;
+  aiStats.promptTokens = 0;
+  aiStats.completionTokens = 0;
+  aiStats.totalMs = 0;
+}
+
+export function getAiStats() {
+  return { ...aiStats };
+}
+
+/** 可重试的 HTTP 状态码：限流与服务端错误 */
+const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
+/** 可重试的网络层错误码 */
+const RETRYABLE_CODES = new Set([
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ECONNABORTED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EPIPE',
+  'ECONNREFUSED',
+]);
+
+/**
+ * 判断错误是否值得重试。
+ * 认证 / 参数类错误（401 / 403 / 400）重试无意义，直接失败。
+ */
+export function isRetryableError(err: unknown): boolean {
+  const e = err as { response?: { status?: number }; code?: string; message?: string };
+  const status = e?.response?.status;
+  if (typeof status === 'number') return RETRYABLE_STATUS.has(status);
+  if (e?.code && RETRYABLE_CODES.has(e.code)) return true;
+  // 模型返回空内容可能是瞬时异常，值得重试一次
+  return String(e?.message || '').includes('返回为空');
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * 调用 OpenRouter chat completion（带指数退避重试）。
+ *
+ * 重试存在的意义：单次网络抖动或 429 若直接抛错，调用方会把这条内容判为
+ * 「不相关」而静默丢弃，导致真实热点永久漏报。默认重试 2 次，可用 AI_MAX_RETRIES 调整。
  */
 export async function chat(messages: ChatMessage[], opts: ChatOptions = {}): Promise<string> {
   if (!hasAI()) {
     throw new Error('OpenRouter API Key 未配置，请在 .env 中填写 OPENROUTER_API_KEY');
   }
 
-  const res = await axios.post(
-    `${config.openrouter.baseUrl}/chat/completions`,
-    {
-      model: opts.model || config.openrouter.model,
-      messages,
-      temperature: opts.temperature ?? 0.2,
-      max_tokens: opts.max_tokens ?? 2048,
-      response_format: opts.json ? { type: 'json_object' } : undefined,
-      ...(opts.extra || {}),
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${config.openrouter.apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://ai-hot-monitor.local',
-        'X-Title': 'AI Hot Monitor',
-      },
-      timeout: 60000,
-    },
-  );
+  const maxRetries = config.openrouter.maxRetries;
+  let lastErr: unknown;
 
-  const choice = res.data?.choices?.[0];
-  const message = choice?.message;
-  const content: string | undefined = message?.content?.trim();
-  if (!content) {
-    // 推理模型（如 deepseek 系列）会先消耗 token 生成 reasoning，max_tokens 过小会导致
-    // finish_reason=length 且 content 为空。给出更明确的诊断信息。
-    const reason =
-      choice?.finish_reason === 'length'
-        ? '输出被 max_tokens 截断（finish_reason=length），请增大 max_tokens'
-        : `reason=${choice?.finish_reason}`;
-    const reasoningInfo = message?.reasoning
-      ? `，reasoning 已生成 ${message.reasoning.length} 字符`
-      : '';
-    throw new Error(`OpenRouter 返回为空: ${reason}${reasoningInfo}`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const startedAt = Date.now();
+    try {
+      const res = await axios.post(
+        `${config.openrouter.baseUrl}/chat/completions`,
+        {
+          model: opts.model || config.openrouter.model,
+          messages,
+          temperature: opts.temperature ?? 0.2,
+          max_tokens: opts.max_tokens ?? 2048,
+          response_format: opts.json ? { type: 'json_object' } : undefined,
+          ...(opts.extra || {}),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${config.openrouter.apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://ai-hot-monitor.local',
+            'X-Title': 'AI Hot Monitor',
+          },
+          timeout: 60000,
+        },
+      );
+
+      aiStats.calls++;
+      aiStats.totalMs += Date.now() - startedAt;
+      const usage = res.data?.usage;
+      if (usage) {
+        aiStats.promptTokens += Number(usage.prompt_tokens) || 0;
+        aiStats.completionTokens += Number(usage.completion_tokens) || 0;
+      }
+
+      const choice = res.data?.choices?.[0];
+      const message = choice?.message;
+      const content: string | undefined = message?.content?.trim();
+      if (!content) {
+        // 推理模型（如 deepseek 系列）会先消耗 token 生成 reasoning，max_tokens 过小会导致
+        // finish_reason=length 且 content 为空。给出更明确的诊断信息。
+        const reason =
+          choice?.finish_reason === 'length'
+            ? '输出被 max_tokens 截断（finish_reason=length），请增大 max_tokens'
+            : `reason=${choice?.finish_reason}`;
+        const reasoningInfo = message?.reasoning
+          ? `，reasoning 已生成 ${message.reasoning.length} 字符`
+          : '';
+        throw new Error(`OpenRouter 返回为空: ${reason}${reasoningInfo}`);
+      }
+      return content;
+    } catch (err) {
+      lastErr = err;
+      if (attempt >= maxRetries || !isRetryableError(err)) break;
+      aiStats.retries++;
+      // 指数退避 + 抖动，避免瞬时限流被连续放大
+      const delay =
+        Math.min(8000, config.openrouter.retryBaseMs * 2 ** attempt) +
+        Math.floor(Math.random() * 250);
+      console.warn(
+        `[ai] 调用失败（第 ${attempt + 1} 次），${delay}ms 后重试: ${(err as Error).message}`,
+      );
+      await sleep(delay);
+    }
   }
-  return content;
+
+  aiStats.failures++;
+  throw lastErr;
 }
 
 /**
@@ -180,16 +273,24 @@ function coerceScore15(v: unknown): number {
   return Number.isFinite(n) ? Math.min(5, Math.max(1, Math.round(n))) : 1;
 }
 
-export interface VerifyResult {
+/** 相关性判定结果（与真伪判定解耦，可独立评估 / 独立调优） */
+export interface RelevanceResult {
   relevance: number;
   keywordMentioned: boolean;
   matchType: string;
   summary: string;
   relevanceReason: string;
+}
+
+/** 真伪判定结果（与相关性判定解耦） */
+export interface AuthenticityResult {
   isFake: boolean;
   confidence: number;
   fakeReason: string;
 }
+
+/** 相关性 + 真伪的合并结果（对业务调用方保持单一入口） */
+export interface VerifyResult extends RelevanceResult, AuthenticityResult {}
 
 export interface JudgeResult {
   summaryScore: number;
@@ -268,6 +369,66 @@ export function parseJudgeResult(raw: unknown): JudgeResult {
   return judgeResultSchema.parse(raw);
 }
 
+// ===================== 拆分后的两个判定 schema =====================
+
+/** 相关性判定原始字段（全部可选，字段缺失不会让整体校验失败） */
+const rawRelevanceSchema = z
+  .object({
+    relevance: z.unknown(),
+    keywordMentioned: z.unknown(),
+    matchType: z.unknown(),
+    summary: z.unknown(),
+    relevanceReason: z.unknown(),
+  })
+  .partial();
+
+export const relevanceResultSchema = rawRelevanceSchema.transform(
+  (o): RelevanceResult => ({
+    relevance: coerce01(o.relevance, 0, 'relevance'),
+    keywordMentioned: coerceBool(o.keywordMentioned, false),
+    matchType: coerceText(o.matchType),
+    summary: coerceText(o.summary),
+    relevanceReason: coerceText(o.relevanceReason),
+  }),
+);
+
+/** 真伪判定原始字段 */
+const rawAuthenticitySchema = z
+  .object({
+    isFake: z.unknown(),
+    confidence: z.unknown(),
+    fakeReason: z.unknown(),
+  })
+  .partial();
+
+export const authenticityResultSchema = rawAuthenticitySchema.transform(
+  (o): AuthenticityResult => ({
+    isFake: coerceBool(o.isFake, false),
+    confidence: coerce01(o.confidence, 0.5, 'confidence'),
+    fakeReason: coerceText(o.fakeReason),
+  }),
+);
+
+export function parseRelevanceResult(raw: unknown): RelevanceResult {
+  if (!isPlainObject(raw)) {
+    console.warn(
+      `[ai] 相关性判定返回的不是 JSON 对象（${Array.isArray(raw) ? 'array' : typeof raw}），已按默认值兜底`,
+    );
+    return relevanceResultSchema.parse({});
+  }
+  return relevanceResultSchema.parse(raw);
+}
+
+export function parseAuthenticityResult(raw: unknown): AuthenticityResult {
+  if (!isPlainObject(raw)) {
+    console.warn(
+      `[ai] 真伪判定返回的不是 JSON 对象（${Array.isArray(raw) ? 'array' : typeof raw}），已按默认值兜底`,
+    );
+    return authenticityResultSchema.parse({});
+  }
+  return authenticityResultSchema.parse(raw);
+}
+
 // ===================== 关键词与相关性工具 =====================
 
 /** 拆分关键词为 token（按空白/常见分隔符；连字符等保留，如 GPT-5） */
@@ -313,51 +474,87 @@ export function isRelevantHit(
 // ===================== AI 能力 =====================
 
 /**
- * 关键词防伪验证：判断一条内容与关键词的相关度，并识别假冒/谣言。
- * 只输出连续的 relevance 分数 + 证据化理由，不再输出 isRelevant 布尔；
- * 返回值经 zod 校验，字段类型与取值范围有保证。
+ * 相关性判定（独立调用）：只回答「与关键词的相关程度」。
+ * 与真伪判定拆开后，两个任务互不干扰，可分别评估与独立调优。
+ */
+export async function verifyRelevance(
+  keyword: string,
+  item: { title: string; snippet?: string; source: string },
+): Promise<RelevanceResult> {
+  const messages: ChatMessage[] = [
+    { role: 'system', content: '你是一个严谨的信息相关性审核助手，只输出 JSON。' },
+    { role: 'user', content: relevancePrompt(keyword, item) },
+  ];
+  // 网络层重试由 chat() 负责；这里处理「调用成功但结构无效」的语义异常。
+  // 若直接兜底成 relevance=0，等价于静默漏掉一条真热点，因此宁可补试后抛错，
+  // 交由上层降级为关键词匹配（见 services/monitor.js）。
+  const attempts = 2;
+  let lastErr: unknown = new Error('AI 相关性判定失败');
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const raw = parseJSON(await chat(messages, { json: true, max_tokens: 1200 }));
+      if (isPlainObject(raw) && raw.relevance !== undefined && raw.relevance !== null) {
+        return parseRelevanceResult(raw);
+      }
+      lastErr = new Error('响应缺少 relevance 字段');
+    } catch (err) {
+      lastErr = err;
+    }
+    if (i + 1 < attempts) {
+      console.warn(`[ai] 相关性判定无效（第 ${i + 1} 次），补试一次: ${(lastErr as Error).message}`);
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * 真伪判定（独立调用）：只回答「是否疑似假冒 / 谣言 / 标题党」。
+ * 业务侧仅对「已判定相关」的条目调用，避免为大量不相关条目浪费 token。
+ */
+export async function checkAuthenticity(
+  keyword: string,
+  item: { title: string; snippet?: string; source: string },
+): Promise<AuthenticityResult> {
+  const messages: ChatMessage[] = [
+    { role: 'system', content: '你是一个严谨的信息真实性审核助手，只输出 JSON。' },
+    { role: 'user', content: authenticityPrompt(keyword, item) },
+  ];
+  const attempts = 2;
+  let lastErr: unknown = new Error('AI 真伪判定失败');
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const raw = parseJSON(await chat(messages, { json: true, max_tokens: 600 }));
+      if (isPlainObject(raw) && raw.isFake !== undefined && raw.isFake !== null) {
+        return parseAuthenticityResult(raw);
+      }
+      lastErr = new Error('响应缺少 isFake 字段');
+    } catch (err) {
+      lastErr = err;
+    }
+    if (i + 1 < attempts) {
+      console.warn(`[ai] 真伪判定无效（第 ${i + 1} 次），补试一次: ${(lastErr as Error).message}`);
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * 关键词防伪验证（组合入口，对调用方保持兼容）：
+ *   1. 先做相关性判定；
+ *   2. 仅当相关性过阈值时才做真伪判定（省 token，且避免两个任务互相干扰）；
+ *   3. 合并为完整的 VerifyResult 返回。
  */
 export async function verifyKeywordHit(
   keyword: string,
   item: { title: string; snippet?: string; source: string },
 ): Promise<VerifyResult> {
-  const prompt = `你是一个严格的信息相关性审核助手。请判断下面这条内容与关键词「${keyword}」的关联程度，并评估其真实性。
-
-【相关性判定标准（务必严格遵守）】
-1. 只有当内容【明确提及关键词本身】或【无歧义地指向关键词所指的同一主体/产品/事件】，且关键词是该内容的【核心主题】时，才判为「直接相关」并给高 relevance（>=0.7）。
-2. 仅提到同一领域/同一生态、但【未提及关键词本身】的内容（例如关键词是「Claude Sonnet 4.6」，内容只讲「OpenClaw」而没有提到 Claude Sonnet 4.6）→ 判为「不相关」，relevance 应 <0.3。
-3. 只是顺带提一句、或在标题/摘要边缘出现关键词但主体无关 → 「间接相关」，relevance 给 0.3~0.6。
-4. 判断依据必须来自「标题」和「摘要」里能指出的具体文字，不能臆测或脑补。
-
-【校准示例】
-- 关键词「Claude Sonnet 4.6」，标题「Anthropic 发布 Claude Sonnet 4.6，推理能力大幅提升」→ relevance 0.95，matchType "直接相关"，keywordMentioned true。
-- 关键词「Claude Sonnet 4.6」，标题「OpenClaw 推出新的 agent 框架」，全文未提 Claude Sonnet 4.6 → relevance 0.05，matchType "不相关"，keywordMentioned false。
-
-【待审核内容】
-标题：${item.title}
-摘要：${item.snippet || '（无）'}
-来源：${item.source}
-
-请严格只返回 JSON（不要输出任何其他文字），格式：
-{
-  "relevance": 0.0~1.0,           // 与关键词「${keyword}」的相关度（0 完全不相关，1 完全相关）
-  "keywordMentioned": true/false, // 标题或摘要中是否明确提及关键词本身
-  "matchType": "直接相关|间接相关|不相关",
-  "summary": "一句话总结：该内容相对于关键词「${keyword}」讲了什么（核心要点 + 与关键词的关联点）",
-  "relevanceReason": "1~2句，引用标题/摘要中的具体文字，说明为什么给出这个相关度",
-  "isFake": false/true,           // 是否疑似假冒、谣言、标题党或虚假信息
-  "confidence": 0.0~1.0,          // 真实性判断置信度
-  "fakeReason": "若 isFake 为 true，说明为什么疑似假冒/谣言/标题党；否则输出空字符串"
-}`;
-
-  const text = await chat(
-    [
-      { role: 'system', content: '你是一个严谨的信息相关性审核助手，只输出 JSON。' },
-      { role: 'user', content: prompt },
-    ],
-    { json: true, max_tokens: 2000 },
-  );
-  return parseVerifyResult(parseJSON(text));
+  const rel = await verifyRelevance(keyword, item);
+  if (!isRelevantHit(rel)) {
+    // 不相关的内容无需再判真伪
+    return { ...rel, isFake: false, confidence: 0.5, fakeReason: '' };
+  }
+  const fake = await checkAuthenticity(keyword, item);
+  return { ...rel, ...fake };
 }
 
 /**
@@ -369,22 +566,7 @@ export async function judgeQuality(
   item: { title: string; snippet?: string },
   result: Pick<VerifyResult, 'relevance' | 'matchType' | 'summary' | 'relevanceReason'>,
 ): Promise<JudgeResult> {
-  const prompt = `你是一个严格的评估助手。请评估下面这条「相关性判定结果」的质量，从「是否围绕关键词、是否给出明确判断依据、是否可读」三个维度打分。
-
-关键词：${keyword}
-内容标题：${item.title}
-内容摘要：${item.snippet || '（无）'}
-AI 给出的相关度：${result.relevance}
-AI 给出的匹配类型：${result.matchType}
-AI 给出的摘要：${result.summary}
-AI 给出的相关理由：${result.relevanceReason}
-
-评分参考：
-- summaryScore：摘要是否围绕「该内容与关键词的关联点」展开（而不是泛泛介绍内容本身）？1=纯介绍内容、未提关键词；5=精准点出与关键词的关联。
-- reasonScore：理由是否引用标题/摘要中的具体文字作为判断依据？1=无依据的空话；5=证据充分、逻辑清晰。
-
-请严格只返回 JSON（不要输出任何其他文字），格式：
-{ "summaryScore": 1~5, "reasonScore": 1~5, "comment": "一句话点评，指出主要问题" }`;
+  const prompt = judgePrompt(keyword, item, result);
 
   const text = await chat(
     [

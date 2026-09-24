@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { config } from '../config.js';
+import { getSourceEnabled } from './state.js';
 import { http, normalize, sleep, parseRelativeTime } from './utils.js';
 
 /**
@@ -249,12 +249,13 @@ function engineName(engine) {
  * 返回当前启用（配置开启）的搜索引擎列表
  */
 export function enabledEngines() {
+  const enabled = getSourceEnabled();
   const map = {
-    bing: config.sources.enabled.bing,
-    duckduckgo: config.sources.enabled.duckduckgo,
-    google: config.sources.enabled.google,
-    sogou: config.sources.enabled.sogou,
-    baidu: config.sources.enabled.baidu,
+    bing: enabled.bing,
+    duckduckgo: enabled.duckduckgo,
+    google: enabled.google,
+    sogou: enabled.sogou,
+    baidu: enabled.baidu,
   };
   return Object.keys(map).filter((k) => map[k]);
 }

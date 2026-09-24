@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { formatInterval, splitInterval, toMinutes } from '../lib/utils.js';
 import Switch from '../components/Switch.jsx';
 import AlertCard from '../components/AlertCard.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -16,16 +17,22 @@ import {
   ChevronRightIcon,
 } from '../components/Icons.jsx';
 
-const INTERVALS = [5, 10, 15, 30, 60];
+const UNITS = [
+  { value: 'minute', label: '分钟' },
+  { value: 'hour', label: '小时' },
+  { value: 'day', label: '天' },
+];
 
 export default function KeywordView({ status, tick, progress }) {
   const [keywords, setKeywords] = useState([]);
   const [input, setInput] = useState('');
-  const [intervalMin, setIntervalMin] = useState(5);
+  const [intervalValue, setIntervalValue] = useState(1);
+  const [intervalUnit, setIntervalUnit] = useState('hour');
   const [adding, setAdding] = useState(false);
   const [running, setRunning] = useState({});
   const [editing, setEditing] = useState(null);
-  const [editInterval, setEditInterval] = useState(5);
+  const [editIntervalValue, setEditIntervalValue] = useState(1);
+  const [editIntervalUnit, setEditIntervalUnit] = useState('hour');
   const [expanded, setExpanded] = useState(null);
 
   const load = () => api.getKeywords().then(setKeywords).catch(console.error);
@@ -38,7 +45,7 @@ export default function KeywordView({ status, tick, progress }) {
     if (!input.trim() || adding) return;
     setAdding(true);
     try {
-      await api.addKeyword(input.trim(), intervalMin);
+      await api.addKeyword(input.trim(), toMinutes(intervalValue, intervalUnit));
       setInput('');
       await load();
     } catch (err) {
@@ -73,11 +80,13 @@ export default function KeywordView({ status, tick, progress }) {
 
   const startEdit = (kw) => {
     setEditing(kw.id);
-    setEditInterval(kw.intervalMin);
+    const { value, unit } = splitInterval(kw.intervalMin);
+    setEditIntervalValue(value);
+    setEditIntervalUnit(unit);
   };
 
   const saveEdit = async (id) => {
-    await api.updateKeyword(id, { intervalMin: editInterval });
+    await api.updateKeyword(id, { intervalMin: toMinutes(editIntervalValue, editIntervalUnit) });
     setEditing(null);
     await load();
   };
@@ -117,18 +126,28 @@ export default function KeywordView({ status, tick, progress }) {
           />
         </div>
         <div className="flex gap-2">
-          <select
-            value={intervalMin}
-            onChange={(e) => setIntervalMin(Number(e.target.value))}
-            aria-label="扫描周期"
-            className="rounded-xl bg-white border border-mint-200 px-3 py-2.5 text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-mint-400/60 cursor-pointer"
-          >
-            {INTERVALS.map((m) => (
-              <option key={m} value={m}>
-                {m} 分钟
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1 rounded-xl bg-white border border-mint-200 px-2 py-1">
+            <input
+              type="number"
+              min={1}
+              value={intervalValue}
+              onChange={(e) => setIntervalValue(e.target.value)}
+              aria-label="抓取间隔数值"
+              className="w-12 rounded-lg bg-white text-sm text-slate-700 text-center focus:outline-none focus:ring-2 focus:ring-mint-400/60"
+            />
+            <select
+              value={intervalUnit}
+              onChange={(e) => setIntervalUnit(e.target.value)}
+              aria-label="抓取间隔单位"
+              className="rounded-lg bg-white text-sm text-slate-600 focus:outline-none cursor-pointer"
+            >
+              {UNITS.map((u) => (
+                <option key={u.value} value={u.value}>
+                  {u.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <button
             type="submit"
             disabled={adding || !input.trim()}
@@ -169,14 +188,23 @@ export default function KeywordView({ status, tick, progress }) {
                     <p className="text-sm font-semibold text-slate-800 truncate">{kw.text}</p>
                     {isEditing ? (
                       <div className="flex items-center gap-1.5 mt-1">
+                        <input
+                          type="number"
+                          min={1}
+                          value={editIntervalValue}
+                          onChange={(e) => setEditIntervalValue(e.target.value)}
+                          aria-label="抓取间隔数值"
+                          className="w-12 rounded-lg bg-white border border-mint-200 px-2 py-1 text-xs text-slate-600 text-center focus:outline-none cursor-pointer"
+                        />
                         <select
-                          value={editInterval}
-                          onChange={(e) => setEditInterval(Number(e.target.value))}
-                          className="rounded-lg bg-white border border-mint-200 px-2 py-1 text-xs text-slate-600 focus:outline-none cursor-pointer"
+                          value={editIntervalUnit}
+                          onChange={(e) => setEditIntervalUnit(e.target.value)}
+                          aria-label="抓取间隔单位"
+                          className="rounded-lg bg-white border border-mint-200 px-1.5 py-1 text-xs text-slate-600 focus:outline-none cursor-pointer"
                         >
-                          {INTERVALS.map((m) => (
-                            <option key={m} value={m}>
-                              {m} 分钟
+                          {UNITS.map((u) => (
+                            <option key={u.value} value={u.value}>
+                              {u.label}
                             </option>
                           ))}
                         </select>
@@ -197,7 +225,7 @@ export default function KeywordView({ status, tick, progress }) {
                       </div>
                     ) : (
                       <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                        每 {kw.intervalMin} 分钟 · {kw.alerts?.length ?? 0} 条命中
+                        每 {formatInterval(kw.intervalMin)} · {kw.alerts?.length ?? 0} 条命中
                       </p>
                     )}
                     {running[kw.id] && (

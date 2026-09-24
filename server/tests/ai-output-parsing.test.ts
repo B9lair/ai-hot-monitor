@@ -12,11 +12,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseVerifyResult,
+  parseRelevanceResult,
+  parseAuthenticityResult,
   parseJudgeResult,
   parseJSON,
   coerceBool,
   coerce01,
   isRelevantHit,
+  isRetryableError,
   mentionsKeyword,
 } from '../src/ai/openrouter.ts';
 
@@ -164,4 +167,60 @@ test('mentionsKeyword: 纯数字 token 不放行（Claude Sonnet 4.6 vs 4.6）',
     mentionsKeyword({ title: 'OpenAI 新模型发布' }, 'GPT-5', ['OpenAI GPT-5']),
     true,
   );
+});
+
+// ===== 相关性与真伪拆分（v2.0）=====
+
+test('parseRelevanceResult: 只保留相关性字段，真伪字段被隔离', () => {
+  const r = parseRelevanceResult({
+    relevance: '0.85',
+    keywordMentioned: 'true',
+    matchType: '直接相关',
+    summary: '摘要',
+    relevanceReason: '理由',
+    isFake: 'true',
+    confidence: 0.9,
+  });
+  assert.equal(r.relevance, 0.85);
+  assert.equal(r.keywordMentioned, true);
+  assert.equal(r.matchType, '直接相关');
+  assert.equal('isFake' in r, false, '相关性结果不应携带真伪字段，避免两个任务耦合');
+});
+
+test('parseRelevanceResult: 缺字段返回安全默认值', () => {
+  assert.deepEqual(parseRelevanceResult({}), {
+    relevance: 0,
+    keywordMentioned: false,
+    matchType: '',
+    summary: '',
+    relevanceReason: '',
+  });
+});
+
+test('parseAuthenticityResult: 独立解析真伪字段（字符串布尔仍按语义）', () => {
+  const r = parseAuthenticityResult({ isFake: 'false', confidence: '0.9', fakeReason: '' });
+  assert.equal(r.isFake, false, "isFake='false' 不能变成 true");
+  assert.equal(r.confidence, 0.9);
+  assert.equal(parseAuthenticityResult({ isFake: '是' }).isFake, true);
+});
+
+test('parseAuthenticityResult: 非对象输入按默认值兜底', () => {
+  const r = quiet(() => parseAuthenticityResult('oops'));
+  assert.deepEqual(r, { isFake: false, confidence: 0.5, fakeReason: '' });
+});
+
+// ===== 失败重试判定 =====
+
+test('isRetryableError: 瞬时故障重试，认证/参数错误不重试', () => {
+  // 值得重试：限流、服务端错误、网络抖动、空响应
+  assert.equal(isRetryableError({ response: { status: 429 } }), true);
+  assert.equal(isRetryableError({ response: { status: 503 } }), true);
+  assert.equal(isRetryableError({ code: 'ECONNRESET' }), true);
+  assert.equal(isRetryableError({ code: 'ETIMEDOUT' }), true);
+  assert.equal(isRetryableError(new Error('OpenRouter 返回为空: reason=length')), true);
+  // 不值得重试：鉴权 / 参数错误，重试只会浪费时间
+  assert.equal(isRetryableError({ response: { status: 401 } }), false);
+  assert.equal(isRetryableError({ response: { status: 403 } }), false);
+  assert.equal(isRetryableError({ response: { status: 400 } }), false);
+  assert.equal(isRetryableError(new Error('未知错误')), false);
 });

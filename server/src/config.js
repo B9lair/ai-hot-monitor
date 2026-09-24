@@ -43,6 +43,10 @@ export const config = {
     // AI 校验前的廉价预过滤：丢弃标题/摘要完全不含关键词任一有效 token 的条目
     preFilterKeyword: bool(process.env.PRE_FILTER_KEYWORD, true),
     baseUrl: 'https://openrouter.ai/api/v1',
+    // AI 请求失败重试次数（覆盖网络抖动 / 429 / 5xx / 空响应；0 = 不重试）
+    maxRetries: Math.max(0, Math.min(5, parseInt(process.env.AI_MAX_RETRIES || '2', 10) || 0)),
+    // 重试基础退避（毫秒），实际延迟按 2^attempt 指数增长并叠加抖动
+    retryBaseMs: Math.max(100, parseInt(process.env.AI_RETRY_BASE_MS || '800', 10) || 800),
   },
 
   sources: {
@@ -113,8 +117,6 @@ export const config = {
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || '',
     from: process.env.SMTP_FROM || process.env.SMTP_USER || '',
-    // 无任何登录用户时的回退收件人（兼容旧行为）
-    to: (process.env.NOTIFY_EMAIL_TO || '').split(',').map((s) => s.trim()).filter(Boolean),
     fromName: process.env.MAIL_FROM_NAME || 'AI热点监控',
   },
 
@@ -130,15 +132,22 @@ export const config = {
     cookieMaxAgeDays: Math.max(1, parseInt(process.env.SESSION_MAX_AGE_DAYS || '30', 10)),
   },
 
-  // 邮件通知策略
+  // 访问口令（全站门禁）：留空 = 关闭，任何人均可访问
+  gate: {
+    password: process.env.ACCESS_PASSWORD || '',
+  },
+
+  // 邮件通知策略：按用户自定义间隔汇总发送（与监控轮次解耦）
   email: {
-    // instant（每条即发）| digest（每轮聚合，默认）| daily（每日汇总）
-    mode: ['instant', 'digest', 'daily'].includes(process.env.EMAIL_MODE)
-      ? process.env.EMAIL_MODE
-      : 'digest',
-    dailyAt: process.env.EMAIL_DAILY_AT || '09:00',
+    // 用户未设置时的默认发送间隔（分钟）
+    defaultIntervalMin: Math.max(1, parseInt(process.env.EMAIL_DEFAULT_INTERVAL_MIN || '60', 10)),
+    // 用户可设置的间隔钳制范围（分钟）
+    minIntervalMin: Math.max(1, parseInt(process.env.EMAIL_MIN_INTERVAL_MIN || '15', 10)),
+    maxIntervalMin: Math.max(1, parseInt(process.env.EMAIL_MAX_INTERVAL_MIN || '43200', 10)),
+    // 汇总调度器扫描间隔（分钟）：每 tick 扫描一次，判断哪些用户已到各自间隔
+    dispatcherTickMin: Math.max(1, parseInt(process.env.EMAIL_DISPATCH_TICK_MIN || '1', 10)),
+    // 单封邮件最多条数（超出分批）
     maxItems: Math.max(1, parseInt(process.env.EMAIL_MAX_ITEMS || '20', 10)),
-    maxPerHour: Math.max(1, parseInt(process.env.EMAIL_MAX_PER_HOUR || '6', 10)),
     quietHours: parseQuietHours(process.env.EMAIL_QUIET_HOURS),
     minRelevance: Math.min(1, Math.max(0, num(process.env.EMAIL_MIN_RELEVANCE, 0))),
     minHotScore: Math.min(100, Math.max(0, num(process.env.EMAIL_MIN_HOT_SCORE, 0))),
@@ -147,8 +156,23 @@ export const config = {
   // 前端地址；留空 = 不限制跨域来源，并按访问来源自动推断（见 src/urls.js）
   clientOrigin: (process.env.CLIENT_ORIGIN || '').trim(),
 
+  // 网络代理（可选）：axios 会自动读取 HTTP_PROXY/HTTPS_PROXY/NO_PROXY 环境变量，
+  // 这里仅读取用于启动提示，不改变 axios 行为。国内网络测试境外源时填 Clash 端口即可。
+  proxy: {
+    url: (
+      process.env.HTTPS_PROXY ||
+      process.env.https_proxy ||
+      process.env.HTTP_PROXY ||
+      process.env.http_proxy ||
+      ''
+    ).trim(),
+  },
+
   intervals: {
-    monitorMin: parseInt(process.env.MONITOR_INTERVAL_MIN || '30', 10),
+    // 调度 tick 间隔（分钟）：调度器每 tick 检查一次哪些关键词到期（默认 1 分钟）
+    tickMin: Math.max(1, parseInt(process.env.SCHEDULER_TICK_MIN || '1', 10)),
+    // 关键词默认抓取间隔（分钟）：新增/未指定间隔时使用（默认 60 = 1 小时）
+    defaultIntervalMin: Math.max(1, parseInt(process.env.MONITOR_INTERVAL_MIN || '60', 10)),
   },
 
   // 信息生命周期：命中保留 N 天（超过且未收藏 → 前端隐藏，数据库保留）
@@ -157,7 +181,7 @@ export const config = {
 
 export const hasAI = () => Boolean(config.openrouter.apiKey);
 
-/** SMTP 缺少哪些必填项（用于启动提示；NOTIFY_EMAIL_TO 是可选兜底，不参与判定） */
+/** SMTP 缺少哪些必填项（用于启动提示） */
 export const smtpMissingVars = () => {
   const missing = [];
   if (!config.smtp.host) missing.push('SMTP_HOST');
@@ -167,3 +191,10 @@ export const smtpMissingVars = () => {
 };
 
 export const hasSMTP = () => smtpMissingVars().length === 0;
+
+/** 钳制邮件发送间隔（分钟）到 [minIntervalMin, maxIntervalMin]；非法值回退默认 */
+export const clampEmailIntervalMin = (v) => {
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n) || n <= 0) return config.email.defaultIntervalMin;
+  return Math.min(config.email.maxIntervalMin, Math.max(config.email.minIntervalMin, n));
+};

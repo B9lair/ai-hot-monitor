@@ -5,7 +5,6 @@ import { verifyKeywordHit, isRelevantHit, mentionsKeyword } from '../ai/openrout
 import { expandQuery } from '../ai/query-expansion.ts';
 import { config, hasAI } from '../config.js';
 import { notifyBrowser } from './notifier.js';
-import { sendAlertEmails } from './email.js';
 
 /** AI 校验并发上限（受控并发，显著缩短单轮耗时） */
 const VERIFY_CONCURRENCY = 4;
@@ -29,6 +28,10 @@ async function mapLimit(items, limit, fn) {
  * 1. 从多源搜索关键词相关内容
  * 2. 批量去重 + 受控并发执行 AI 防伪验证
  * 3. 命中则入库并通知
+ *
+ * 容错原则：AI 校验失败时**降级为关键词字面匹配**，而不是丢弃该条，
+ * 避免网络抖动导致真实热点永久漏报（返回值 degraded 字段记录降级条数）。
+ *
  * @param {object} keywordRecord
  * @param {(p: {total: number, done: number}) => void} [onProgress] 校验进度回调
  */
@@ -67,33 +70,42 @@ export async function runMonitor(keywordRecord, onProgress) {
   let done = 0;
   let verified = 0;
   let alerted = 0;
+  let degraded = 0; // AI 不可用（未配置 Key 或调用失败）而走关键词兜底的条数
   const newAlerts = []; // 本轮新命中，供邮件聚合
   onProgress?.({ total, done });
+
+  /**
+   * 降级兜底结果：AI 不可用（未配置 Key 或调用失败）时按关键词字面匹配判定。
+   * 命中即取阈值分（刚好过入库线），保证「AI 抖动」不会让真实热点被静默丢弃。
+   */
+  const fallbackResult = (item) => {
+    const matched = mentionsKeyword(item, keyword, expansions);
+    return {
+      relevance: matched ? config.openrouter.relevanceThreshold : 0.2,
+      keywordMentioned: matched,
+      matchType: matched ? '直接相关' : '不相关',
+      isFake: false,
+      confidence: 0.5,
+      summary: item.snippet || item.title,
+      relevanceReason: matched ? 'AI 校验不可用，降级为关键词字面匹配（命中即视为相关）' : '',
+      fakeReason: '',
+    };
+  };
 
   // 受控并发执行 AI 校验
   const checked = await mapLimit(candidates, VERIFY_CONCURRENCY, async (item) => {
     try {
-      let result;
       if (hasAI()) {
-        result = await verifyKeywordHit(keyword, item);
-      } else {
-        // 无 AI 时退化为纯关键词匹配
-        const matched = item.title.includes(keyword) || (item.snippet || '').includes(keyword);
-        result = {
-          relevance: matched ? 0.8 : 0.2,
-          keywordMentioned: matched,
-          matchType: matched ? '直接相关' : '不相关',
-          isFake: false,
-          confidence: 0.6,
-          summary: item.snippet || item.title,
-          relevanceReason: matched ? '标题或摘要中包含关键词，按纯关键词匹配判定相关' : '',
-          fakeReason: '',
-        };
+        return { item, result: await verifyKeywordHit(keyword, item), degraded: false };
       }
-      return { item, result };
+      // 未配置 API Key：走关键词兜底
+      degraded++;
+      return { item, result: fallbackResult(item), degraded: true };
     } catch (err) {
-      console.warn(`[monitor] 校验失败（${item.source}）:`, err.message);
-      return null;
+      // 关键：调用失败不再静默丢弃（原先 return null 会让真实热点永久漏报）
+      degraded++;
+      console.warn(`[monitor] AI 校验失败，降级为关键词匹配（${item.source}）: ${err.message}`);
+      return { item, result: fallbackResult(item), degraded: true };
     } finally {
       done++;
       onProgress?.({ total, done });
@@ -141,42 +153,42 @@ export async function runMonitor(keywordRecord, onProgress) {
         content: `${item.title}\n${result.summary}`,
         url: item.url,
       });
-
-      // 即时模式：每条命中立即发一封邮件
-      if (config.email.mode === 'instant') {
-        await sendAlertEmails([alertWithKeyword], { batchKey: `instant:${created.id}` });
-      }
     }
   }
 
-  return { keyword, scanned: items.length, verified, alerted, alerts: newAlerts };
+  // 记录本次运行时间：调度器据此按 intervalMin 判断该关键词下次到期时间（失败不记录，下轮重试）
+  await prisma.keyword
+    .update({ where: { id: keywordRecord.id }, data: { lastRunAt: new Date() } })
+    .catch(() => {});
+
+  return { keyword, scanned: items.length, verified, alerted, degraded, alerts: newAlerts };
 }
 
 /**
- * 对已启用的所有关键词执行一轮监控。
- * 轮末按 digest 模式把本轮全部命中聚合成邮件发送。
+ * 对已启用的所有关键词执行一轮监控（仅执行已到期的关键词）。
+ * 每个关键词按自身 intervalMin + lastRunAt 判断是否到期，避免无差别全量抓取。
+ * 命中仅入库 + 浏览器通知；邮件汇总由 email.js 的 processEmailDigests 按用户间隔独立发送。
  */
 export async function runAllMonitors() {
+  const now = Date.now();
   const keywords = await prisma.keyword.findMany({ where: { enabled: true } });
-  const results = [];
-  const roundAlerts = [];
-  const roundId = `digest:${Date.now()}`;
 
-  for (const kw of keywords) {
+  // 到期判定：从未运行过（lastRunAt 为空）→ 立即执行；否则距上次运行 ≥ intervalMin 才执行
+  const due = keywords.filter((k) => {
+    if (!k.lastRunAt) return true;
+    const elapsedMin = (now - new Date(k.lastRunAt).getTime()) / 60000;
+    return elapsedMin >= k.intervalMin;
+  });
+
+  if (!due.length) return [];
+
+  const results = [];
+
+  for (const kw of due) {
     try {
-      const r = await runMonitor(kw);
-      results.push(r);
-      roundAlerts.push(...(r.alerts || []));
+      results.push(await runMonitor(kw));
     } catch (err) {
       console.error(`[monitor] 关键词「${kw.text}」监控失败:`, err.message);
-    }
-  }
-
-  if (config.email.mode === 'digest' && roundAlerts.length) {
-    try {
-      await sendAlertEmails(roundAlerts, { batchKey: roundId });
-    } catch (err) {
-      console.error('[monitor] 邮件聚合发送失败:', err.message);
     }
   }
 

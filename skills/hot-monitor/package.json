@@ -1,0 +1,15 @@
+{
+  "name": "hot-monitor-skill",
+  "version": "0.1.0",
+  "description": "AI 热点监控 Skill - 自包含多源搜索 + AI 判定",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "search": "node scripts/ahm.js search"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "cheerio": "^1.0.0",
+    "zod": "^4.6.5"
+  }
+}

@@ -1,14 +1,22 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
 import { runMonitor } from '../services/monitor.js';
-import { sendAlertEmails } from '../services/email.js';
 import { broadcastMonitorProgress } from '../socket.js';
 import { hasAI, hasSMTP, config } from '../config.js';
+import { getSourceEnabled, getSourceList, setSourceEnabled } from '../sources/state.js';
+import { PROMPT_VERSION } from '../ai/prompts.ts';
 
 const router = Router();
 
 // 可直接下推 Prisma orderBy 的排序字段
 const DIRECT_SORTS = ['createdAt', 'publishedAt', 'confidence', 'hotScore', 'relevance', 'favoritedAt'];
+
+/** 抓取间隔钳制到 1 分钟 ~ 30 天（分钟）；非法值回退到默认间隔 */
+const clampInterval = (v) => {
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n) || n <= 0) return config.intervals.defaultIntervalMin;
+  return Math.min(43200, Math.max(1, n));
+};
 
 /** 动态/JSON 指标排序（trending 智能热榜分 / likes / stars），缺失值统一排最后 */
 function applyCustomSort(list, sort, dir) {
@@ -55,8 +63,8 @@ router.post('/keywords', async (req, res) => {
   if (!text || !text.trim()) return res.status(400).json({ error: '关键词不能为空' });
   const kw = await prisma.keyword.upsert({
     where: { text: text.trim() },
-    update: { enabled: true, intervalMin: intervalMin || 5 },
-    create: { text: text.trim(), intervalMin: intervalMin || 5 },
+    update: { enabled: true, intervalMin: clampInterval(intervalMin) },
+    create: { text: text.trim(), intervalMin: clampInterval(intervalMin) },
   });
   res.json(kw);
 });
@@ -66,7 +74,7 @@ router.patch('/keywords/:id', async (req, res) => {
   const { enabled, intervalMin } = req.body || {};
   const data = {};
   if (typeof enabled === 'boolean') data.enabled = enabled;
-  if (intervalMin) data.intervalMin = intervalMin;
+  if (intervalMin != null && intervalMin !== '') data.intervalMin = clampInterval(intervalMin);
   const kw = await prisma.keyword.update({ where: { id }, data });
   res.json(kw);
 });
@@ -76,26 +84,15 @@ router.delete('/keywords/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-// 立即执行一次关键词监控（进度定向推送给发起人；结果邮件聚合发送给发起人）
+// 立即执行一次关键词监控（进度定向推送给发起人；命中入库后按用户间隔汇总发送）
 router.post('/keywords/:id/run', async (req, res) => {
   const kw = await prisma.keyword.findUnique({ where: { id: req.params.id } });
   if (!kw) return res.status(404).json({ error: '关键词不存在' });
-  const userId = req.session?.userId;
   const result = await runMonitor(kw, (p) => {
     broadcastMonitorProgress({ keywordId: kw.id, keyword: kw.text, ...p });
   });
 
-  if (config.email.mode === 'digest' && result.alerts?.length) {
-    try {
-      await sendAlertEmails(result.alerts, {
-        batchKey: `digest:manual:${Date.now()}`,
-        userIds: userId ? [userId] : undefined,
-      });
-    } catch (err) {
-      console.error('[api] 手动检查邮件发送失败:', err.message);
-    }
-  }
-
+  // 命中入库后由 email.js 的 processEmailDigests 按用户间隔统一发送，这里不即时发邮件
   const { alerts, ...payload } = result;
   res.json(payload);
 });
@@ -305,15 +302,35 @@ router.delete('/alerts/:id/favorite', async (req, res) => {
   res.json(updated);
 });
 
+// ===== 数据源开关（运行时动态切换，降低调用成本） =====
+router.get('/sources', (_req, res) => {
+  res.json({ sources: getSourceList() });
+});
+
+router.patch('/sources/:key', (req, res) => {
+  const { enabled } = req.body || {};
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'enabled 必须为布尔值' });
+  }
+  try {
+    setSourceEnabled(req.params.key, enabled);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  res.json({ sources: getSourceList() });
+});
+
 // ===== 状态 =====
 router.get('/status', (_req, res) => {
-  const en = config.sources.enabled;
+  const en = getSourceEnabled();
   res.json({
     hasAI: hasAI(),
     hasSMTP: hasSMTP(),
     model: config.openrouter.model,
     judgeModel: config.openrouter.judgeModel || config.openrouter.model,
     relevanceThreshold: config.openrouter.relevanceThreshold,
+    promptVersion: PROMPT_VERSION,
+    aiMaxRetries: config.openrouter.maxRetries,
     intervals: config.intervals,
     sources: {
       twitter: Boolean(config.sources.twitterApiKey) && en.twitter,

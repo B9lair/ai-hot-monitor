@@ -1,5 +1,5 @@
 import { prisma } from '../db.js';
-import { config, hasSMTP } from '../config.js';
+import { config, hasSMTP, clampEmailIntervalMin } from '../config.js';
 import { sendMail } from './mailer.js';
 import { signUnsubscribe } from './auth.js';
 import { baseUrl } from '../urls.js';
@@ -95,18 +95,25 @@ function inQuietHours() {
   return q.start <= q.end ? h >= q.start && h < q.end : h >= q.start || h < q.end;
 }
 
+/** 间隔（分钟）→ 可读标签（60 → "1 小时"，1440 → "1 天"，90 → "90 分钟"） */
+function formatDurationLabel(min) {
+  const m = Number(min);
+  if (!Number.isFinite(m) || m <= 0) return '1 小时';
+  if (m % 1440 === 0) return `${m / 1440} 天`;
+  if (m % 60 === 0) return `${m / 60} 小时`;
+  return `${m} 分钟`;
+}
+
 // ===== 主题 =====
-function buildSubject(alerts, { mode, part = 1, totalParts = 1 }) {
+function buildSubject(alerts, { durationLabel, part = 1, totalParts = 1 }) {
   let s;
-  if (mode === 'daily') {
-    s = `[AI热点监控] 今日热点汇总 · ${alerts.length} 条`;
-  } else if (alerts.length === 1) {
+  if (alerts.length === 1) {
     const a = alerts[0];
     s = `[AI热点监控] 【${a.keywordText || '关键词'}】有新动态 · ${a.source}`;
   } else {
     const kws = [...new Set(alerts.map((a) => a.keywordText).filter(Boolean))];
     const shown = kws.slice(0, 3).join('、');
-    s = `[AI热点监控] ${alerts.length} 条新热点${kws.length ? `（${shown}${kws.length > 3 ? '等' : ''}）` : ''}`;
+    s = `[AI热点监控] 近 ${durationLabel} ${alerts.length} 条新热点${kws.length ? `（${shown}${kws.length > 3 ? '等' : ''}）` : ''}`;
   }
   if (totalParts > 1) s += `（${part}/${totalParts}）`;
   return s;
@@ -149,12 +156,9 @@ function renderAlertBlock(a) {
  * @param {object[]} alerts
  * @param {object|null} user 为 null 时表示无用户回退（无退订链接）
  */
-function renderAlertEmail(alerts, user, { mode, part, totalParts }) {
+function renderAlertEmail(alerts, user, { durationLabel, part, totalParts }) {
   const kws = new Set(alerts.map((a) => a.keywordText).filter(Boolean));
-  const stat =
-    mode === 'daily'
-      ? `过去 24 小时共 ${alerts.length} 条热点${kws.size ? `，涉及 ${kws.size} 个关注范围` : ''}`
-      : `本轮共 ${alerts.length} 条热点${kws.size ? `，涉及 ${kws.size} 个关注范围` : ''}`;
+  const stat = `近 ${durationLabel} 共 ${alerts.length} 条热点${kws.size ? `，涉及 ${kws.size} 个关注范围` : ''}`;
 
   const unsub = user
     ? `${baseUrl()}/api/email/unsubscribe?token=${signUnsubscribe(user.id)}`
@@ -202,21 +206,7 @@ function renderAlertText(alerts, user, { totalParts, part }) {
   return `AI Hot Monitor · 热点雷达（${alerts.length} 条${totalParts > 1 ? `，第 ${part}/${totalParts} 封` : ''}）\n\n${lines.join('\n\n')}${tail}`;
 }
 
-// ===== 幂等与配额 =====
-async function isDuplicate(userId, batchKey) {
-  if (!batchKey) return false;
-  const hit = await prisma.notification.findFirst({ where: { userId, batchKey } });
-  return Boolean(hit);
-}
-
-async function hourQuotaExceeded(userId) {
-  const since = new Date(Date.now() - 3600_000);
-  const count = await prisma.notification.count({
-    where: { userId, channel: 'email', createdAt: { gte: since } },
-  });
-  return count >= config.email.maxPerHour;
-}
-
+// ===== 记录 =====
 async function recordEmail({ userId, recipient, subject, alerts, batchKey, res }) {
   await prisma.notification
     .create({
@@ -239,32 +229,18 @@ async function recordEmail({ userId, recipient, subject, alerts, batchKey, res }
     .catch(() => {});
 }
 
-// ===== 延后队列：免打扰 / 超配额时不丢弃，改为稍后补发 =====
-const pendingByUser = new Map(); // userId -> { alerts, mode }
-const MAX_PENDING_PER_USER = 200;
-
-function deferForUser(userId, alerts, mode) {
-  const cur = pendingByUser.get(userId) || { alerts: [], mode };
-  const seen = new Set(cur.alerts.map((a) => a.id));
-  for (const a of alerts) if (!seen.has(a.id)) cur.alerts.push(a);
-  // 上限保护：超出只保留最近的部分
-  if (cur.alerts.length > MAX_PENDING_PER_USER) {
-    cur.alerts = cur.alerts.slice(-MAX_PENDING_PER_USER);
-  }
-  cur.mode = mode;
-  pendingByUser.set(userId, cur);
-}
-
-/** 投递给单个用户（按 EMAIL_MAX_ITEMS 分批） */
-async function deliverToUser(user, chunks, { mode, batchKey }) {
+// ===== 投递 =====
+/** 投递单个用户的全部命中（按 EMAIL_MAX_ITEMS 分批）；全部成功返回 true */
+async function deliverToUser(user, chunks, { durationLabel, batchKey }) {
+  let allOk = true;
   for (let i = 0; i < chunks.length; i++) {
     const part = i + 1;
     const totalParts = chunks.length;
-    const subject = buildSubject(chunks[i], { mode, part, totalParts });
+    const subject = buildSubject(chunks[i], { durationLabel, part, totalParts });
     const res = await sendMail({
       to: user.email,
       subject,
-      html: renderAlertEmail(chunks[i], user, { mode, part, totalParts }),
+      html: renderAlertEmail(chunks[i], user, { durationLabel, part, totalParts }),
       text: renderAlertText(chunks[i], user, { part, totalParts }),
       headers: { unsubscribe: `${baseUrl()}/api/email/unsubscribe?token=${signUnsubscribe(user.id)}` },
     });
@@ -276,107 +252,86 @@ async function deliverToUser(user, chunks, { mode, batchKey }) {
       batchKey: totalParts > 1 && batchKey ? `${batchKey}:${part}` : batchKey,
       res,
     });
+    if (!res.ok) allOk = false;
   }
+  return allOk;
 }
 
-// ===== 对外入口 =====
-/**
- * 发送热点邮件（聚合成一封或分批）
- * @param {object[]} alerts 本轮命中（含 keywordText）
- * @param {{batchKey?:string, mode?:string, userIds?:string[]}} [opts] userIds 限定收件人
- */
-export async function sendAlertEmails(alerts, { batchKey, mode = config.email.mode, userIds } = {}) {
-  if (!hasSMTP()) return;
-  const filtered = filterAlerts(alerts);
-  if (!filtered.length) return;
+// ===== 汇总调度（按用户自定义间隔） =====
 
-  const chunks = chunkArray(filtered, config.email.maxItems);
-  const users = await prisma.user.findMany({
-    where: { notifyEmail: true, ...(userIds ? { id: { in: userIds } } : {}) },
-  });
-
-  // 指定了收件人但都不可收（未开启邮件）→ 不发
-  if (!users.length && userIds) return;
-
-  // 无用户 → 回退旧行为（发到全局 NOTIFY_EMAIL_TO）；该路径无用户可延后，免打扰时直接跳过
-  if (!users.length) {
-    if (!config.smtp.to.length) return;
-    if (inQuietHours()) {
-      console.log('[email] 处于免打扰时段，回退收件人邮件跳过');
-      return;
-    }
-    for (let i = 0; i < chunks.length; i++) {
-      const part = i + 1;
-      const totalParts = chunks.length;
-      const subject = buildSubject(chunks[i], { mode, part, totalParts });
-      const res = await sendMail({
-        to: config.smtp.to,
-        subject,
-        html: renderAlertEmail(chunks[i], null, { mode, part, totalParts }),
-        text: renderAlertText(chunks[i], null, { part, totalParts }),
-      });
-      await recordEmail({ userId: null, recipient: config.smtp.to.join(','), subject, alerts: chunks[i], batchKey, res });
-    }
-    return;
-  }
-
-  const quiet = inQuietHours();
-  for (const user of users) {
-    if (await isDuplicate(user.id, batchKey)) continue;
-
-    // 免打扰 / 超配额 → 暂缓，等 flushPendingEmails 补发（不丢弃）
-    if (quiet || (await hourQuotaExceeded(user.id))) {
-      deferForUser(user.id, filtered, mode);
-      console.log(
-        `[email] 用户 ${user.email} 暂缓 ${filtered.length} 条（${quiet ? '免打扰时段' : '已达每小时上限'}），稍后自动补发`,
-      );
-      continue;
-    }
-
-    await deliverToUser(user, chunks, { mode, batchKey });
-  }
-}
-
-/**
- * 补发暂缓的邮件（由定时任务每分钟调用）。
- * 仍处于免打扰或仍超配额时保持暂缓，下轮再试。
- */
-export async function flushPendingEmails() {
-  if (!hasSMTP() || pendingByUser.size === 0) return;
-  if (inQuietHours()) return;
-
-  for (const [userId, item] of [...pendingByUser.entries()]) {
-    if (await hourQuotaExceeded(userId)) continue;
-
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.notifyEmail) {
-      pendingByUser.delete(userId);
-      continue;
-    }
-
-    try {
-      const chunks = chunkArray(item.alerts, config.email.maxItems);
-      const count = item.alerts.length;
-      await deliverToUser(user, chunks, { mode: item.mode, batchKey: `pending:${userId}:${Date.now()}` });
-      pendingByUser.delete(userId);
-      console.log(`[email] 已补发用户 ${user.email} 暂缓的 ${count} 条`);
-    } catch (err) {
-      console.error('[email] 补发失败，保留待下次重试:', err.message);
-    }
-  }
-}
-
-/** 当前暂缓中的用户数（供状态排查） */
-export const pendingEmailCount = () => pendingByUser.size;
-
-/** 每日汇总：取近 24 小时命中发送（由定时任务在 EMAIL_DAILY_AT 调用） */
-export async function sendDailyDigest() {
-  const since = new Date(Date.now() - 86400_000);
-  const alerts = await prisma.alert.findMany({
-    where: { createdAt: { gte: since }, isFake: false },
+/** 查询某时间点之后的新增命中（已过滤 isFake 与邮件阈值），带关键词文本 */
+async function queryAlertsSince(since) {
+  const rows = await prisma.alert.findMany({
+    where: { createdAt: { gt: since }, isFake: false },
     orderBy: { createdAt: 'desc' },
     include: { keyword: { select: { text: true } } },
   });
-  const mapped = alerts.map((a) => ({ ...a, keywordText: a.keyword?.text }));
-  await sendAlertEmails(mapped, { mode: 'daily', batchKey: `daily:${new Date().toISOString().slice(0, 10)}` });
+  return filterAlerts(rows.map((a) => ({ ...a, keywordText: a.keyword?.text })));
 }
+
+/** 推进用户「上次发送」基线（只在成功发送或空窗口时调用） */
+async function advanceLastEmailAt(userId, t) {
+  await prisma.user.update({ where: { id: userId }, data: { lastEmailAt: t } }).catch(() => {});
+}
+
+let digestRunning = false;
+
+/**
+ * 邮件汇总调度器入口（由定时任务每 tick 调用）。
+ * 扫描所有 notifyEmail=true 的用户，对「距上次发送已满自身间隔」的用户，
+ * 把「上次发送之后」的新增命中打包成一封发送。
+ */
+export async function processEmailDigests() {
+  if (!hasSMTP() || digestRunning) return;
+  digestRunning = true;
+  try {
+    const quiet = inQuietHours();
+    const users = await prisma.user.findMany({ where: { notifyEmail: true } });
+    for (const user of users) {
+      try {
+        await processUserDigest(user, quiet);
+      } catch (err) {
+        console.error(`[email] 用户 ${user.email} 汇总处理失败:`, err.message);
+      }
+    }
+  } finally {
+    digestRunning = false;
+  }
+}
+
+/** 处理单个用户的汇总：判断是否到期 → 查询窗口内命中 → 打包发送 → 推进基线 */
+async function processUserDigest(user, quiet) {
+  const intervalMin = clampEmailIntervalMin(user.emailIntervalMin);
+  const intervalMs = intervalMin * 60000;
+  const now = Date.now();
+
+  // 计算发送窗口起点：避免「从未发过」的存量用户补发历史（窗口最多回看一个间隔）
+  let windowStart;
+  if (user.lastEmailAt) {
+    if (now - new Date(user.lastEmailAt).getTime() < intervalMs) return; // 未到期
+    windowStart = user.lastEmailAt;
+  } else {
+    const createdAt = new Date(user.createdAt).getTime();
+    if (now - createdAt < intervalMs) return; // 新用户尚未到首个间隔
+    windowStart = new Date(Math.max(createdAt, now - intervalMs));
+  }
+
+  if (quiet) return; // 免打扰时段：跳过且不推进基线
+
+  const alerts = await queryAlertsSince(windowStart);
+  if (!alerts.length) {
+    // 空窗口也推进基线，避免重复扫描同一段空区间
+    await advanceLastEmailAt(user.id, new Date());
+    return;
+  }
+
+  const chunks = chunkArray(alerts, config.email.maxItems);
+  const durationLabel = formatDurationLabel(intervalMin);
+  const batchKey = `digest:${user.id}:${new Date(windowStart).getTime()}`;
+  const ok = await deliverToUser(user, chunks, { durationLabel, batchKey });
+  if (ok) await advanceLastEmailAt(user.id, new Date());
+  // 发送失败不推进基线，下个 tick 自动重试同一窗口
+}
+
+/** 当前是否正在执行汇总（供状态排查） */
+export const isDigesting = () => digestRunning;

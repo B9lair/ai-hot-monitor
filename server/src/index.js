@@ -7,6 +7,7 @@ import { initSocket } from './socket.js';
 import { initScheduler } from './scheduler.js';
 import { verifyMailer } from './services/mailer.js';
 import { rememberOrigin } from './urls.js';
+import { gateMiddleware, gateRouter } from './middleware/gate.js';
 import apiRouter from './routes/api.js';
 import authRouter from './routes/auth.js';
 import emailRouter from './routes/email.js';
@@ -22,8 +23,13 @@ app.use((req, _res, next) => {
   next();
 });
 
-// 公开：健康检查 / 登录 / 退订
+// 公开：健康检查 / 门禁状态与校验
 app.get('/api/health', (_req, res) => res.json({ ok: true, hasAI: hasAI() }));
+app.use('/api/gate', gateRouter);
+
+// 全站访问口令（ACCESS_PASSWORD 非空时生效；verify / unsubscribe 邮件回调放行）
+app.use(gateMiddleware);
+
 app.use('/api/auth', authRouter);
 app.use('/api/email', emailRouter);
 
@@ -47,6 +53,17 @@ initScheduler();
 
 server.listen(config.port, () => {
   console.log(`✅ AI Hot Monitor 后端已启动: http://localhost:${config.port}`);
+  // 境外源经代理访问：提示代理是否生效，避免「开了境外源但忘了挂代理」白等超时
+  const foreign = ['google', 'duckduckgo', 'reddit', 'v2ex'].filter(
+    (k) => config.sources.enabled[k],
+  );
+  if (config.proxy.url) {
+    console.log(`🌐 网络代理已启用: ${config.proxy.url}（境外源经代理访问）`);
+  } else if (foreign.length) {
+    console.warn(
+      `⚠️  已开启境外源（${foreign.join(' / ')}）但未检测到 HTTPS_PROXY/HTTP_PROXY，国内网络下预计全部超时。`,
+    );
+  }
   if (!hasAI()) {
     console.warn('⚠️  未配置 OPENROUTER_API_KEY，AI 识别将退化为关键词匹配。请在 .env 中填写。');
   }

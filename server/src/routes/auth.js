@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
 import { requestLogin, consumeLoginToken } from '../services/auth.js';
+import { clampEmailIntervalMin } from '../config.js';
 import { baseUrl } from '../urls.js';
 
 const router = Router();
@@ -26,8 +27,11 @@ router.get('/verify', async (req, res) => {
   try {
     const user = await consumeLoginToken(req.query.token);
     if (!user) return back('expired');
+    // regenerate 会重建会话，先记住门禁状态以便保留（避免登录后要重输口令）
+    const gateOk = req.session?.gateOk;
     req.session.regenerate((err) => {
       if (err) return back('error');
+      if (gateOk) req.session.gateOk = true;
       req.session.userId = user.id;
       req.session.save(() => back('ok'));
     });
@@ -42,7 +46,7 @@ router.get('/me', async (req, res) => {
   if (!req.session?.userId) return res.json({ user: null });
   const user = await prisma.user.findUnique({
     where: { id: req.session.userId },
-    select: { id: true, email: true, notifyEmail: true },
+    select: { id: true, email: true, notifyEmail: true, emailIntervalMin: true },
   });
   res.json({ user: user || null });
 });
@@ -60,10 +64,11 @@ router.patch('/prefs', async (req, res) => {
   if (!req.session?.userId) return res.status(401).json({ error: '未登录' });
   const data = {};
   if (typeof req.body?.notifyEmail === 'boolean') data.notifyEmail = req.body.notifyEmail;
+  if (req.body?.emailIntervalMin != null) data.emailIntervalMin = clampEmailIntervalMin(req.body.emailIntervalMin);
   const user = await prisma.user.update({
     where: { id: req.session.userId },
     data,
-    select: { id: true, email: true, notifyEmail: true },
+    select: { id: true, email: true, notifyEmail: true, emailIntervalMin: true },
   });
   res.json(user);
 });

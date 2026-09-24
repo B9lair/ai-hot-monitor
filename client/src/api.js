@@ -8,8 +8,13 @@ async function request(path, options = {}) {
   });
 
   if (res.status === 401) {
+    const body = await res.json().catch(() => ({}));
+    if (body.needGate) {
+      window.dispatchEvent(new Event('ahm:need-gate'));
+      throw new Error(body.error || '需要访问口令');
+    }
     window.dispatchEvent(new Event('ahm:unauthorized'));
-    throw new Error('未登录');
+    throw new Error(body.error || '未登录');
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
@@ -19,6 +24,10 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  // 访问口令门禁
+  gateStatus: () => request('/gate/status'),
+  gateVerify: (password) => request('/gate/verify', { method: 'POST', body: JSON.stringify({ password }) }),
+
   // 登录与偏好
   login: (email) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email }) }),
   me: () => request('/auth/me'),
@@ -27,6 +36,11 @@ export const api = {
 
   // 状态
   getStatus: () => request('/status'),
+
+  // 数据源开关（运行时动态切换）
+  getSources: () => request('/sources'),
+  updateSource: (key, enabled) =>
+    request(`/sources/${key}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
 
   // keywords
   getKeywords: () => request('/keywords'),
